@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="utf-8">
+  <title>Mob Tokens</title>
+</head>
+
+<body>
+  <h1>Mob Tokens</h1>
+  <p><strong>Version:</strong> 0.4.0</p>
+  <p>Mob Tokens is a Foundry VTT v14 module that lets a GM represent multiple identical creatures as a single token on
+    the canvas. It is aimed at large encounter management where token count, combat overhead, and scene clutter would
+    otherwise slow play down.</p>
+
+  <h2>Highlights</h2>
+  <ul>
+    <li>Create a Mob Token from any existing actor in the Actor Directory.</li>
+    <li>Track pooled HP across the group while keeping a single combatant.</li>
+    <li>Recalculate surviving members automatically as HP changes.</li>
+    <li>Update the actor and token display name to reflect remaining creatures.</li>
+    <li>Mark combatants defeated when the group HP reaches 0.</li>
+    <li>Show group metadata directly on the actor sheet.</li>
+  </ul>
+
+  <h2>Supported Foundry Version</h2>
+  <ul>
+    <li>Foundry VTT v14</li>
+  </ul>
+
+  <h2>Initial System Target</h2>
+  <ul>
+    <li>OSRIC</li>
+    <li>Designed to stay system-agnostic where practical by detecting likely HP fields dynamically.</li>
+  </ul>
+
+  <h2>Installation</h2>
+  <ol>
+    <li>Copy this module into your Foundry Data/modules directory.</li>
+    <li>Enable <strong>Mob Tokens</strong> in your world.</li>
+    <li>Make sure the GM account has permission to create actors.</li>
+  </ol>
+
+  <h2>Usage</h2>
+  <ol>
+    <li>Open the Actor Directory.</li>
+    <li>Right-click a base actor.</li>
+    <li>Choose <strong>Create Group</strong>.</li>
+    <li>Enter the creature count.</li>
+    <li>Confirm or adjust the HP per creature value.</li>
+    <li>Click <strong>Create</strong>.</li>
+  </ol>
+  <p>The module creates a new actor named like <code>Giant Rat x10</code>. When that actor takes damage through its
+    normal HP field, the remaining count is recalculated with <code>floor(currentHP / hpPerCreature)</code>. At 0 HP,
+    the remaining count becomes 0 and linked combatants are marked defeated.</p>
+
+  <h2>Stored Data</h2>
+  <p>Mob token actors store their metadata in actor flags under <code>flags.mob-tokens</code>.</p>
+  <p>Tracked values:</p>
+  <ul>
+    <li><code>sourceActorId</code></li>
+    <li><code>sourceActorName</code></li>
+    <li><code>creatureCount</code></li>
+    <li><code>remainingCount</code></li>
+    <li><code>hpPerCreature</code></li>
+    <li><code>maxGroupHP</code></li>
+    <li><code>currentGroupHP</code></li>
+    <li><code>isGroupActor</code></li>
+  </ul>
+
+  <h2>v0.4.0 Scope</h2>
+  <p>Included in this version:</p>
+  <ul>
+    <li>Mob token creation from any actor in the directory</li>
+    <li>Mob creation from selected tokens with multi-result counts</li>
+    <li>Mob splitting with explicit subgroup counts</li>
+    <li>Mob splitting into individual actors</li>
+    <li>Pooled HP tracking (uses actual current HP of selected tokens)</li>
+    <li>Remaining member calculation</li>
+    <li>Token and actor name updates</li>
+    <li>Basic defeat handling in combat</li>
+    <li>Morale check and reset flow</li>
+    <li>Mob information panel on the actor sheet</li>
+  </ul>
+  <p>Not included in this version:</p>
+  <ul>
+    <li>Merging groups</li>
+    <li>Mixed creature groups</li>
+    <li>Automatic attack scaling</li>
+    <li>Swarm mechanics</li>
+    <li>Formation tracking</li>
+    <li>AI features</li>
+    <li>Loot generation</li>
+    <li>Advanced statistics</li>
+  </ul>
+
+  <h2>Notes</h2>
+  <ul>
+    <li>For best results, place linked tokens from the generated Mob Token actor.</li>
+    <li>The module updates the actor name to match the current remaining count so the combat tracker and linked tokens
+      stay aligned.</li>
+    <li>HP field detection is intentionally generic, but systems with unusual actor HP schemas may need a follow-up
+      compatibility pass.</li>
+  </ul>
+
+  <h2>Playwright UI Tests</h2>
+  <p>This module includes Playwright regression tests under <code>tests/</code>. Requires the Gamemaster account to
+    exist in the world (default for all worlds).</p>
+  <ul>
+    <li>Run <code>npm install</code> in the module folder.</li>
+    <li>Optional: copy <code>.env.example</code> to <code>.env</code> and set Foundry connection values.</li>
+    <li>Use <code>npm run test:ui:headed</code> for visible runs.</li>
+    <li>Use <code>npm run test:ui</code> for headless runs.</li>
+  </ul>
+</body>
+
+</html>

@@ -1,0 +1,27 @@
+<form class="mob-tokens-dialog">
+    <div class="form-group">
+        <label>{{localize "MOBTOKENS.DialogSourceActor"}}</label>
+        <input type="text" value="{{sourceActorName}}" disabled>
+    </div>
+    <div class="form-group">
+        <label>{{localize "MOBTOKENS.DialogGroupName"}}</label>
+        <input data-ag="create-group-name" type="text" name="groupName" value="{{defaultGroupName}}" required>
+    </div>
+    <div class="form-group">
+        <label>{{localize "MOBTOKENS.DialogTargetFolder"}}</label>
+        <select data-ag="create-target-folder" name="targetFolder">
+            {{#each folderOptions}}
+            <option value="{{id}}" {{#if selected}} selected{{/if}}>{{label}}</option>
+            {{/each}}
+        </select>
+    </div>
+    <div class="form-group">
+        <label>{{localize "MOBTOKENS.DialogCreatureCount"}}</label>
+        <input data-ag="create-creature-count" type="number" name="creatureCount" value="1" min="1" step="1" required>
+    </div>
+    <div class="form-group">
+        <label>{{localize "MOBTOKENS.DialogHPPerCreature"}}</label>
+        <input data-ag="create-hp-per-creature" type="number" name="hpPerCreature" value="{{defaultHP}}" min="1"
+            step="1" required>
+    </div>
+</form>

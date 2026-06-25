@@ -1,0 +1,27 @@
+<form class="mob-tokens-dialog mob-tokens-split-dialog">
+    <div class="form-group">
+        <label>{{localize "MOBTOKENS.DialogSourceActor"}}</label>
+        <input type="text" value="{{sourceActorName}}" disabled>
+    </div>
+    <div class="form-group">
+        <label>{{localize "MOBTOKENS.DialogCurrentCount"}}</label>
+        <input type="number" value="{{totalCount}}" disabled>
+    </div>
+    <div class="form-group">
+        <label>{{localize "MOBTOKENS.DialogSplitGroupCount"}}</label>
+        <input data-ag="split-group-count" type="number" name="splitGroupCount" value="{{defaultGroups}}" min="2"
+            max="{{totalCount}}" step="1" required>
+    </div>
+    <div class="form-group">
+        <label>{{localize "MOBTOKENS.DialogSplitCounts"}}</label>
+        <input data-ag="split-counts" type="text" name="splitCounts" value="{{defaultCounts}}" required>
+        <p class="notes">{{splitCountsHint}}</p>
+    </div>
+    <div class="form-group mob-tokens-checkbox-group">
+        <label>
+            <input data-ag="split-individuals" type="checkbox" name="splitIndividuals">
+            {{localize "MOBTOKENS.DialogSplitIndividuals"}}
+        </label>
+        <p class="notes">{{localize "MOBTOKENS.DialogSplitIndividualsHint"}}</p>
+    </div>
+</form>

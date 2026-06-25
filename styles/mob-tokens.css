@@ -1,0 +1,74 @@
+.mob-tokens-panel {
+    margin: 0 0 1rem;
+    padding: 0.75rem;
+    border: 1px solid var(--color-border-light-tertiary);
+    border-radius: 8px;
+    background: color-mix(in srgb, var(--color-bg-option) 70%, transparent);
+}
+
+.mob-tokens-panel h3 {
+    margin: 0 0 0.5rem;
+    font-size: 1rem;
+}
+
+.mob-tokens-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+    gap: 0.5rem 0.75rem;
+}
+
+.mob-tokens-grid div {
+    display: flex;
+    flex-direction: column;
+    gap: 0.125rem;
+}
+
+.mob-tokens-grid strong {
+    font-size: 0.75rem;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    opacity: 0.8;
+}
+
+.mob-tokens-actions {
+    margin-top: 0.625rem;
+}
+
+.mob-tokens-reset-morale {
+    width: 100%;
+}
+
+.mob-tokens-dialog .form-group {
+    margin-bottom: 0.75rem;
+}
+
+.mob-tokens-dialog label {
+    display: block;
+    margin-bottom: 0.25rem;
+    font-weight: 600;
+}
+
+.mob-tokens-dialog input {
+    width: 100%;
+}
+
+.mob-tokens-checkbox-group label {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-weight: 500;
+}
+
+.mob-tokens-checkbox-group input[type="checkbox"] {
+    width: auto;
+}
+
+#token-hud .control-icon.mob-tokens-create-group,
+#token-hud .control-icon.mob-tokens-split-group {
+    color: var(--color-text-light-highlight);
+}
+
+#token-hud .control-icon.mob-tokens-create-group i,
+#token-hud .control-icon.mob-tokens-split-group i {
+    font-size: 1rem;
+}

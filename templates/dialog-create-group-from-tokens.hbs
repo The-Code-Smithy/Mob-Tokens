@@ -1,0 +1,48 @@
+<form class="mob-tokens-dialog mob-tokens-token-dialog">
+    <div class="form-group">
+        <label>{{localize "MOBTOKENS.DialogSourceActor"}}</label>
+        <input type="text" value="{{sourceActorName}}" disabled>
+    </div>
+    <div class="form-group">
+        <label>{{localize "MOBTOKENS.DialogGroupName"}}</label>
+        <input data-ag="create-group-name" type="text" name="groupName" value="{{defaultGroupName}}" required>
+    </div>
+    <div class="form-group">
+        <label>{{localize "MOBTOKENS.DialogTargetFolder"}}</label>
+        <select data-ag="create-target-folder" name="targetFolder">
+            {{#each folderOptions}}
+            <option value="{{id}}" {{#if selected}} selected{{/if}}>{{label}}</option>
+            {{/each}}
+        </select>
+    </div>
+    <div class="form-group">
+        <label>{{localize "MOBTOKENS.DialogSelectedTokenCount"}}</label>
+        <input type="number" value="{{tokenCount}}" disabled>
+    </div>
+    <div class="form-group">
+        <label>{{localize "MOBTOKENS.DialogCreatureCount"}}</label>
+        <input data-ag="create-creature-count" type="number" name="creatureCount" value="{{defaultCreatureCount}}"
+            min="1" step="1" required>
+    </div>
+    <div class="form-group">
+        <label>{{localize "MOBTOKENS.DialogSplitGroupCount"}}</label>
+        <input data-ag="create-result-group-count" type="number" name="resultGroupCount" value="{{defaultGroupCount}}"
+            min="1" max="{{maxResultGroupCount}}" step="1" required>
+    </div>
+    <div class="form-group">
+        <label>{{localize "MOBTOKENS.DialogSplitCounts"}}</label>
+        <input data-ag="create-group-counts" type="text" name="groupCounts" value="{{defaultCreatureCount}}" required>
+        <p class="notes">{{createCountsHint}}</p>
+    </div>
+    <div class="form-group">
+        <label>{{localize "MOBTOKENS.DialogHPPerCreature"}}</label>
+        <input data-ag="create-hp-per-creature" type="number" name="hpPerCreature" value="{{defaultHP}}" min="1"
+            step="1" required>
+    </div>
+    <div class="form-group mob-tokens-checkbox-group">
+        <label>
+            <input data-ag="create-replace-selected-tokens" type="checkbox" name="replaceSelectedTokens" checked>
+            {{localize "MOBTOKENS.DialogReplaceSelectedTokens"}}
+        </label>
+    </div>
+</form>

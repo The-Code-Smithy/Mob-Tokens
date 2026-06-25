@@ -1,0 +1,23 @@
+<section class="mob-tokens-panel">
+        <h3>{{localize "MOBTOKENS.PanelTitle"}}</h3>
+        <div class="mob-tokens-grid">
+                <div><strong>{{localize "MOBTOKENS.PanelSourceActor"}}</strong><span
+                                data-ag-field="sourceActorName">{{sourceActorName}}</span></div>
+                <div><strong>{{localize "MOBTOKENS.PanelOriginalCount"}}</strong><span
+                                data-ag-field="creatureCount">{{creatureCount}}</span></div>
+                <div><strong>{{localize "MOBTOKENS.PanelRemainingCount"}}</strong><span
+                                data-ag-field="remainingCount">{{remainingCount}}</span></div>
+                <div><strong>{{localize "MOBTOKENS.PanelHPPerCreature"}}</strong><span
+                                data-ag-field="hpPerCreature">{{hpPerCreature}}</span></div>
+                <div><strong>{{localize "MOBTOKENS.PanelTotalHP"}}</strong><span
+                                data-ag-field="maxGroupHP">{{maxGroupHP}}</span></div>
+                <div><strong>{{localize "MOBTOKENS.PanelCurrentHP"}}</strong><span
+                                data-ag-field="currentGroupHP">{{currentGroupHP}}</span></div>
+                <div><strong>{{localize "MOBTOKENS.PanelMorale"}}</strong><span
+                                data-ag-field="moraleStatus">{{moraleStatus}}</span></div>
+        </div>
+        {{#if isGM}}
+        <div class="mob-tokens-actions"><button type="button" class="mob-tokens-reset-morale">{{localize
+                        "MOBTOKENS.PanelResetMorale"}}</button></div>
+        {{/if}}
+</section>
