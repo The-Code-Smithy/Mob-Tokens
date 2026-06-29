@@ -47,7 +47,7 @@ export function renderTokenCountBadge(token)
     background.endFill();
 
     text.position.set(boxWidth / 2, boxHeight / 2);
-    badge.position.set(metrics.offset, metrics.offset);
+    badge.position.set(Math.max((token.w ?? 0) - boxWidth - metrics.offset, metrics.offset), metrics.offset);
     badge.visible = true;
 }
 
@@ -63,7 +63,7 @@ function createTokenCountBadge()
 {
     const badge = new PIXI.Container();
     badge.eventMode = "none";
-    badge.zIndex = 999;
+    badge.zIndex = 20;
 
     const background = new PIXI.Graphics();
     background.name = "background";

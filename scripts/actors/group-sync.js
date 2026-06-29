@@ -61,6 +61,7 @@ async function syncActiveTokens(actor, displayName, isDefeated)
 {
     const activeTokens = actor.getActiveTokens?.() ?? [];
     const defeatedIcon = CONFIG?.controlIcons?.defeated ?? null;
+    const savedOverlayFlagPath = `flags.${FLAG_SCOPE}.savedOverlayEffect`;
 
     for (const token of activeTokens)
     {
@@ -72,10 +73,34 @@ async function syncActiveTokens(actor, displayName, isDefeated)
         }
 
         const currentOverlay = tokenDocument?.overlayEffect ?? null;
-        const desiredOverlay = isDefeated ? defeatedIcon : null;
-        if (currentOverlay !== desiredOverlay)
+        const savedOverlay = tokenDocument?.flags?.[FLAG_SCOPE]?.savedOverlayEffect ?? null;
+
+        if (defeatedIcon)
         {
-            tokenUpdates.overlayEffect = desiredOverlay;
+            if (isDefeated)
+            {
+                // Preserve a non-defeated overlay so we can restore it later.
+                if (currentOverlay !== defeatedIcon)
+                {
+                    if (currentOverlay && savedOverlay !== currentOverlay)
+                    {
+                        tokenUpdates[savedOverlayFlagPath] = currentOverlay;
+                    }
+                    tokenUpdates.overlayEffect = defeatedIcon;
+                }
+            }
+            else
+            {
+                // Only clear or restore overlays that mob-tokens previously replaced.
+                if (currentOverlay === defeatedIcon)
+                {
+                    tokenUpdates.overlayEffect = savedOverlay || null;
+                }
+                if (savedOverlay !== null)
+                {
+                    tokenUpdates[savedOverlayFlagPath] = null;
+                }
+            }
         }
 
         if (Object.keys(tokenUpdates).length > 0)
