@@ -3,6 +3,7 @@ import { getActorFromDirectoryLi, isGroupActor, isMobGroupActor } from "./actors
 import
 {
     injectTokenHudGroupAction,
+    openCreatePartyGroupFromActorsDialog,
     openSplitGroupDialog,
     injectGroupPanel,
     openCreateGroupDialog,
@@ -18,6 +19,15 @@ import { getSystemAdapter } from "./systems/system-adapter.js";
 Hooks.once("init", () =>
 {
     console.log(`${MODULE_ID} | Initializing`);
+    const moduleRecord = game.modules?.get(MODULE_ID);
+    if (moduleRecord)
+    {
+        moduleRecord.api = {
+            ...(moduleRecord.api ?? {}),
+            openCreatePartyGroupFromActorsDialog
+        };
+    }
+
     const defaultMoraleEnabled = getSystemAdapter().moraleEnabledByDefault;
 
     game.settings.register(MODULE_ID, "enableMoraleCheck", {
@@ -156,30 +166,51 @@ function addActorContextEntries(entryOptions)
     }
 
     const splitLabel = game.i18n.localize("MOBTOKENS.ContextSplitGroup");
-    if (entryOptions.some((entry) => entry.label === splitLabel || entry.name === splitLabel)) return;
-
-    entryOptions.push({
-        label: splitLabel,
-        icon: "<i class=\"fas fa-people-group\"></i>",
-        visible: (li) =>
-        {
-            if (!game.user?.isGM) return false;
-            const actor = getActorFromDirectoryLi(li);
-            if (!(actor instanceof Actor)) return false;
-            if (!isMobGroupActor(actor)) return false;
-            const remainingCount = Number(actor.flags?.[FLAG_SCOPE]?.remainingCount) || 0;
-            return remainingCount > 1;
-        },
-        onClick: async (_event, li) =>
-        {
-            const actor = getActorFromDirectoryLi(li);
-            if (!(actor instanceof Actor))
+    if (!entryOptions.some((entry) => entry.label === splitLabel || entry.name === splitLabel))
+    {
+        entryOptions.push({
+            label: splitLabel,
+            icon: "<i class=\"fas fa-people-group\"></i>",
+            visible: (li) =>
             {
-                ui.notifications?.error(game.i18n.localize("MOBTOKENS.Errors.ActorNotFound"));
-                return;
-            }
+                if (!game.user?.isGM) return false;
+                const actor = getActorFromDirectoryLi(li);
+                if (!(actor instanceof Actor)) return false;
+                if (!isMobGroupActor(actor)) return false;
+                const remainingCount = Number(actor.flags?.[FLAG_SCOPE]?.remainingCount) || 0;
+                return remainingCount > 1;
+            },
+            onClick: async (_event, li) =>
+            {
+                const actor = getActorFromDirectoryLi(li);
+                if (!(actor instanceof Actor))
+                {
+                    ui.notifications?.error(game.i18n.localize("MOBTOKENS.Errors.ActorNotFound"));
+                    return;
+                }
 
-            await openSplitGroupDialog(actor);
-        }
-    });
+                await openSplitGroupDialog(actor);
+            }
+        });
+    }
+
+    const createPartyLabel = game.i18n.localize("MOBTOKENS.ContextCreatePartyGroup");
+    if (!entryOptions.some((entry) => entry.label === createPartyLabel || entry.name === createPartyLabel))
+    {
+        entryOptions.push({
+            label: createPartyLabel,
+            icon: "<i class=\"fas fa-users\"></i>",
+            visible: (li) =>
+            {
+                if (!game.user?.isGM) return false;
+                const actor = getActorFromDirectoryLi(li);
+                return actor instanceof Actor && !isGroupActor(actor);
+            },
+            onClick: async (_event, li) =>
+            {
+                const actor = getActorFromDirectoryLi(li);
+                await openCreatePartyGroupFromActorsDialog(actor instanceof Actor ? actor : null);
+            }
+        });
+    }
 }

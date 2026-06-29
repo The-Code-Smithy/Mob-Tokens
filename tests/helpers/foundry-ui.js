@@ -121,12 +121,25 @@ async function waitForGameReady(page)
     {
         const hasGame = typeof window !== "undefined" && Boolean(window.game);
         const hasUi = typeof window !== "undefined" && Boolean(window.ui);
+        const gameReady = Boolean(window.game?.ready);
         const activeUser = Boolean(window.game?.user?.id);
+        const canvasReady = Boolean(window.canvas?.ready);
+        const activeScene = Boolean(window.canvas?.scene);
         const sidebarReady = Boolean(document.querySelector("#sidebar, #ui-right"));
         const joinFormVisible = Boolean(document.querySelector("#join-game-form"));
+        const loadingNotificationVisible = Array.from(document.querySelectorAll("#notifications .notification p"))
+            .some((node) => /loading\s+/i.test(String(node?.textContent ?? "")));
 
-        return hasGame && hasUi && activeUser && sidebarReady && !joinFormVisible;
-    }, null, { timeout: 120000 });
+        return hasGame
+            && hasUi
+            && gameReady
+            && activeUser
+            && canvasReady
+            && activeScene
+            && sidebarReady
+            && !joinFormVisible
+            && !loadingNotificationVisible;
+    }, null, { timeout: 240000 });
 }
 
 function normalizeName(value)

@@ -2,9 +2,13 @@
 
 ## Unreleased
 
+## 0.6.0
+
 - Added system adapter scaffolding (`generic`, `dnd5e`, `osric`) to centralize system-specific behavior.
 - Added optional Morale and Armor Class fields to group creation dialogs when those fields are available on the source actor.
 - Added adapter-driven stat path resolution for creation-time Morale/AC overrides.
+- Added movement-only Party Proxy grouping mode with dedicated HUD create/split controls and member restore behavior.
+- Added Actor Directory shortcut to create Party Proxy groups from a searchable world-actor picker.
 
 ## 0.5.0
 

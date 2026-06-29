@@ -1,7 +1,7 @@
 const { defineConfig } = require("@playwright/test");
 
 const baseURL = process.env.FOUNDRY_BASE_URL || "http://127.0.0.1:30000";
-const headless = (process.env.PLAYWRIGHT_HEADLESS || "false").toLowerCase() === "true";
+const headless = (process.env.PLAYWRIGHT_HEADLESS || "true").toLowerCase() === "true";
 
 module.exports = defineConfig({
     testDir: "./tests",

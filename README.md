@@ -1,12 +1,14 @@
 # Mob Tokens
 
-Version: 0.5.0
+Version: 0.6.0
 
 Mob Tokens is a Foundry VTT v14 module that lets a GM represent multiple identical creatures as a single token on the canvas. It is aimed at large encounter management where token count, combat overhead, and scene clutter would otherwise slow play down.
 
 ## Highlights
 
 - Create a Mob Token from any existing actor in the Actor Directory.
+- Create movement-only Party Proxy groups from selected player actors.
+- Create Party Proxy groups from an Actor Directory searchable picker.
 - Track pooled HP across the group while keeping a single combatant.
 - Recalculate surviving members automatically as HP changes.
 - Update the actor and token display name to reflect remaining creatures.
@@ -39,6 +41,15 @@ Mob Tokens is a Foundry VTT v14 module that lets a GM represent multiple identic
 
 The module creates a new actor named like `Giant Rat x10`. When that actor takes damage through its normal HP field, the remaining count is recalculated with `floor(currentHP / hpPerCreature)`. At 0 HP, the remaining count becomes 0 and linked combatants are marked defeated.
 
+### Party Proxy Groups
+
+1. Open the Actor Directory.
+2. Use the context action to open **Create Party Group**.
+3. Search and select world actors to include.
+4. Confirm to create a movement-only Party Proxy group.
+
+Party Proxy groups are intended for movement and member organization workflows. They preserve party membership and can be split back into their original member actors.
+
 ## Stored Data
 
 Mob token actors store their metadata in actor flags under `flags.mob-tokens`.
@@ -55,6 +66,13 @@ Tracked values:
 - `isGroupActor`
 
 ## Recent Version Updates
+
+### v0.6.0
+
+- Added movement-only Party Proxy grouping mode with dedicated HUD create/split controls and member restore behavior.
+- Added Actor Directory shortcut to create Party Proxy groups from a searchable world-actor picker.
+- Added system adapter scaffolding (`generic`, `dnd5e`, `osric`) to centralize system-specific behavior.
+- Added optional Morale and Armor Class fields to group creation dialogs when those fields are available.
 
 ### v0.5.0
 
@@ -84,7 +102,7 @@ Tracked values:
 - Added pooled HP tracking and automatic surviving-member recalculation.
 - Added morale workflow, token count badge, and actor-sheet group panel.
 
-## v0.5.0 Scope
+## v0.6.0 Scope
 
 Included in this version:
 
@@ -99,6 +117,10 @@ Included in this version:
 - Morale check and reset flow (setting-controlled visibility)
 - Mob information panel on the actor sheet
 - GM Current HP editing from the group sheet (absolute and relative)
+- Movement-only Party Proxy groups and restore-from-split behavior
+- Actor Directory Party Group picker with searchable world-actor list
+- System adapter scaffolding for system-specific field/path handling
+- Optional create-time Morale and AC overrides when available on source actor
 
 Not included in this version:
 
@@ -118,6 +140,7 @@ Not included in this version:
 - Defeated state sync now mirrors the defeated overlay outside combat while preserving any prior non-defeated overlay for restoration.
 - Group count badge placement/layering is tuned to avoid obscuring stacked token status effect icons.
 - Morale UI visibility now follows the world morale setting, and new dnd5e worlds default morale checks off.
+- Party Proxy groups are intentionally movement-only and do not apply mob HP pooling behavior.
 - HP field detection is intentionally generic, but systems with unusual actor HP schemas may need a follow-up compatibility pass.
 
 ## Playwright UI Tests
@@ -152,16 +175,16 @@ Key variables:
 
 ### Run
 
+- Headless mode (default):
+
+	```bash
+	npm run test:ui
+	```
+
 - Headed mode:
 
 	```bash
 	npm run test:ui:headed
-	```
-
-- Headless mode:
-
-	```bash
-	npm run test:ui
 	```
 
 ### Current Coverage
@@ -171,3 +194,4 @@ Key variables:
 - Split using explicit counts and verify resulting actors.
 - Split into individual actors.
 - Verify regroup HUD button appears for selected mob token actors.
+- Create Party Proxy groups from Actor Directory with searchable actor picker.

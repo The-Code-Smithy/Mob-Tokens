@@ -8,7 +8,7 @@
 
 <body>
   <h1>Mob Tokens</h1>
-  <p><strong>Version:</strong> 0.4.0</p>
+  <p><strong>Version:</strong> 0.6.0</p>
   <p>Mob Tokens is a Foundry VTT v14 module that lets a GM represent multiple identical creatures as a single token on
     the canvas. It is aimed at large encounter management where token count, combat overhead, and scene clutter would
     otherwise slow play down.</p>
@@ -16,6 +16,8 @@
   <h2>Highlights</h2>
   <ul>
     <li>Create a Mob Token from any existing actor in the Actor Directory.</li>
+    <li>Create movement-only Party Proxy groups from selected player actors.</li>
+    <li>Create Party Proxy groups from an Actor Directory searchable picker.</li>
     <li>Track pooled HP across the group while keeping a single combatant.</li>
     <li>Recalculate surviving members automatically as HP changes.</li>
     <li>Update the actor and token display name to reflect remaining creatures.</li>
@@ -54,6 +56,16 @@
     normal HP field, the remaining count is recalculated with <code>floor(currentHP / hpPerCreature)</code>. At 0 HP,
     the remaining count becomes 0 and linked combatants are marked defeated.</p>
 
+  <h3>Party Proxy Groups</h3>
+  <ol>
+    <li>Open the Actor Directory.</li>
+    <li>Use the context action to open <strong>Create Party Group</strong>.</li>
+    <li>Search and select world actors to include.</li>
+    <li>Confirm to create a movement-only Party Proxy group.</li>
+  </ol>
+  <p>Party Proxy groups are intended for movement and member organization workflows. They preserve party membership
+    and can be split back into their original member actors.</p>
+
   <h2>Stored Data</h2>
   <p>Mob token actors store their metadata in actor flags under <code>flags.mob-tokens</code>.</p>
   <p>Tracked values:</p>
@@ -68,19 +80,45 @@
     <li><code>isGroupActor</code></li>
   </ul>
 
-  <h2>v0.4.0 Scope</h2>
+  <h2>Recent Version Updates</h2>
+  <h3>v0.6.0</h3>
+  <ul>
+    <li>Added movement-only Party Proxy grouping mode with dedicated HUD create/split controls and member restore
+      behavior.</li>
+    <li>Added Actor Directory shortcut to create Party Proxy groups from a searchable world-actor picker.</li>
+    <li>Added system adapter scaffolding (<code>generic</code>, <code>dnd5e</code>, <code>osric</code>) to centralize
+      system-specific behavior.</li>
+    <li>Added optional Morale and Armor Class fields to group creation dialogs when those fields are available.</li>
+  </ul>
+
+  <h3>v0.5.0</h3>
+  <ul>
+    <li>Group sheets support GM Current HP edits with direct values or signed adjustments (example: <code>22</code>,
+      <code>+9</code>, <code>-9</code>).</li>
+    <li>Current HP sheet input auto-selects on focus and applies updates on Enter or blur.</li>
+    <li>Defeat sync preserves/restores prior non-defeated overlays instead of clearing unrelated overlay state.</li>
+    <li>Token badge layering and placement avoids obscuring stacked token effect icons.</li>
+    <li>Morale defaults are system-aware and morale UI visibility follows the morale setting.</li>
+  </ul>
+
+  <h2>v0.6.0 Scope</h2>
   <p>Included in this version:</p>
   <ul>
     <li>Mob token creation from any actor in the directory</li>
     <li>Mob creation from selected tokens with multi-result counts</li>
     <li>Mob splitting with explicit subgroup counts</li>
     <li>Mob splitting into individual actors</li>
-    <li>Pooled HP tracking (uses actual current HP of selected tokens)</li>
+    <li>Pooled HP tracking</li>
     <li>Remaining member calculation</li>
     <li>Token and actor name updates</li>
     <li>Basic defeat handling in combat</li>
-    <li>Morale check and reset flow</li>
+    <li>Morale check and reset flow (setting-controlled visibility)</li>
     <li>Mob information panel on the actor sheet</li>
+    <li>GM Current HP editing from the group sheet (absolute and relative)</li>
+    <li>Movement-only Party Proxy groups and restore-from-split behavior</li>
+    <li>Actor Directory Party Group picker with searchable world-actor list</li>
+    <li>System adapter scaffolding for system-specific field/path handling</li>
+    <li>Optional create-time Morale and AC overrides when available on source actor</li>
   </ul>
   <p>Not included in this version:</p>
   <ul>
@@ -99,6 +137,7 @@
     <li>For best results, place linked tokens from the generated Mob Token actor.</li>
     <li>The module updates the actor name to match the current remaining count so the combat tracker and linked tokens
       stay aligned.</li>
+    <li>Party Proxy groups are intentionally movement-only and do not apply mob HP pooling behavior.</li>
     <li>HP field detection is intentionally generic, but systems with unusual actor HP schemas may need a follow-up
       compatibility pass.</li>
   </ul>
@@ -109,8 +148,18 @@
   <ul>
     <li>Run <code>npm install</code> in the module folder.</li>
     <li>Optional: copy <code>.env.example</code> to <code>.env</code> and set Foundry connection values.</li>
+    <li>Use <code>npm run test:ui</code> for headless runs (default).</li>
     <li>Use <code>npm run test:ui:headed</code> for visible runs.</li>
-    <li>Use <code>npm run test:ui</code> for headless runs.</li>
+  </ul>
+
+  <h3>Current Coverage</h3>
+  <ul>
+    <li>Open Create Group from Actor Directory context menu.</li>
+    <li>Create a group and split it 4,3.</li>
+    <li>Split using explicit counts and verify resulting actors.</li>
+    <li>Split into individual actors.</li>
+    <li>Verify regroup HUD button appears for selected mob token actors.</li>
+    <li>Create Party Proxy groups from Actor Directory with searchable actor picker.</li>
   </ul>
 </body>
 

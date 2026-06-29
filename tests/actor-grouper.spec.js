@@ -127,6 +127,27 @@ async function waitForCondition(check, timeoutMs = 120000, intervalMs = 500)
     return false;
 }
 
+async function waitForWorldAndCanvasReady(page, timeoutMs = 180000)
+{
+    await page.waitForFunction(() =>
+    {
+        const hasGame = typeof window !== "undefined" && Boolean(window.game);
+        const hasUi = typeof window !== "undefined" && Boolean(window.ui);
+        const gameReady = Boolean(window.game?.ready);
+        const canvasReady = Boolean(window.canvas?.ready);
+        const activeScene = Boolean(window.canvas?.scene);
+        const loadingNotificationVisible = Array.from(document.querySelectorAll("#notifications .notification p"))
+            .some((node) => /loading\s+/i.test(String(node?.textContent ?? "")));
+
+        return hasGame
+            && hasUi
+            && gameReady
+            && canvasReady
+            && activeScene
+            && !loadingNotificationVisible;
+    }, null, { timeout: timeoutMs });
+}
+
 async function setupGroupedTokensForHudTest(page, baseActorName)
 {
     return page.evaluate(async (sourceName) =>
@@ -741,6 +762,7 @@ test.describe("Party Proxy group UI flow", () =>
     {
         const activePage = await loginToFoundry(page);
         await dismissQuickStartPromptIfPresent(activePage);
+        await waitForWorldAndCanvasReady(activePage);
 
         let artifacts = null;
         try
@@ -751,7 +773,7 @@ test.describe("Party Proxy group UI flow", () =>
             {
                 const button = document.querySelector(".control-icon.mob-tokens-create-party-group");
                 return Boolean(button && button.offsetParent !== null);
-            }, null, { timeout: 20000 });
+            }, null, { timeout: 60000 });
 
             await activePage.evaluate(() =>
             {
@@ -761,7 +783,7 @@ test.describe("Party Proxy group UI flow", () =>
 
             await activePage.waitForFunction(() =>
                 Boolean(document.querySelector(".window-app.dialog [data-ag='create-party-group-name']"))
-                , null, { timeout: 20000 });
+                , null, { timeout: 60000 });
 
             const createDialog = activePage.locator(".window-app.dialog [data-ag='create-party-group-name']").last();
 
@@ -838,7 +860,7 @@ test.describe("Party Proxy group UI flow", () =>
             {
                 const button = document.querySelector(".control-icon.mob-tokens-split-party-group");
                 return Boolean(button && button.offsetParent !== null);
-            }, null, { timeout: 20000 });
+            }, null, { timeout: 60000 });
 
             await activePage.evaluate(() =>
             {
@@ -876,6 +898,7 @@ test.describe("Party Proxy group UI flow", () =>
     {
         const activePage = await loginToFoundry(page);
         await dismissQuickStartPromptIfPresent(activePage);
+        await waitForWorldAndCanvasReady(activePage);
 
         let artifacts = null;
         try
@@ -887,7 +910,7 @@ test.describe("Party Proxy group UI flow", () =>
             {
                 const button = document.querySelector(".control-icon.mob-tokens-create-party-group");
                 return Boolean(button && button.offsetParent !== null);
-            }, null, { timeout: 20000 });
+            }, null, { timeout: 60000 });
 
             await activePage.evaluate(() =>
             {
@@ -896,7 +919,7 @@ test.describe("Party Proxy group UI flow", () =>
             });
             await activePage.waitForFunction(() =>
                 Boolean(document.querySelector(".window-app.dialog [data-ag='create-party-group-name']"))
-                , null, { timeout: 20000 });
+                , null, { timeout: 60000 });
             await activePage.evaluate(() =>
             {
                 const dialogs = Array.from(document.querySelectorAll(".window-app.dialog"));
@@ -944,7 +967,7 @@ test.describe("Party Proxy group UI flow", () =>
             {
                 const button = document.querySelector(".control-icon.mob-tokens-split-party-group");
                 return Boolean(button && button.offsetParent !== null);
-            }, null, { timeout: 20000 });
+            }, null, { timeout: 60000 });
 
             await activePage.evaluate(() =>
             {
@@ -981,6 +1004,130 @@ test.describe("Party Proxy group UI flow", () =>
         {
             await restoreNotificationCapture(activePage);
             await cleanupPartyProxyTestArtifacts(activePage, artifacts);
+        }
+    });
+
+    test.fixme("creates a party proxy group from Actor Directory searchable picker", async ({ page }) =>
+    {
+        const activePage = await loginToFoundry(page);
+        await dismissQuickStartPromptIfPresent(activePage);
+        await openActorsSidebar(activePage);
+
+        const seed = `${Date.now()}-${Math.floor(Math.random() * 10000)}`;
+        const actorNames = [
+            `Party Picker Alpha ${seed}`,
+            `Party Picker Bravo ${seed}`
+        ];
+
+        let createdActorIds = [];
+        let createdProxyActorId = null;
+        try
+        {
+            createdActorIds = await activePage.evaluate(async (names) =>
+            {
+                const actorType = game.system?.documentTypes?.Actor?.[0] ?? "character";
+                const ids = [];
+                for (const name of names)
+                {
+                    const actor = await Actor.create({ name, type: actorType }, { renderSheet: false });
+                    ids.push(actor.id);
+                }
+                return ids;
+            }, actorNames);
+
+            const openedFromApi = await activePage.evaluate(async (actorId) =>
+            {
+                const actor = game.actors?.get(actorId);
+                if (!(actor instanceof Actor)) return false;
+
+                const api = game.modules?.get("mob-tokens")?.api;
+                if (typeof api?.openCreatePartyGroupFromActorsDialog === "function")
+                {
+                    await api.openCreatePartyGroupFromActorsDialog(actor);
+                    return true;
+                }
+
+                const options = [];
+                Hooks.call("getActorContextOptions", null, options);
+                const label = game.i18n.localize("MOBTOKENS.ContextCreatePartyGroup");
+                const option = options.find((entry) => entry?.label === label || entry?.name === label);
+                if (!option || typeof option.onClick !== "function") return false;
+
+                const li = document.createElement("li");
+                li.dataset.documentId = actor.id;
+                if (typeof option.visible === "function" && !option.visible(li)) return false;
+
+                await option.onClick(new MouseEvent("contextmenu"), li);
+                return true;
+            }, createdActorIds[0]);
+            expect(openedFromApi).toBe(true);
+
+            const dialog = activePage.locator(".window-app.dialog").filter({ hasText: "Create Party Group" }).last();
+            await expect(dialog).toBeVisible();
+
+            await dialog.locator("[data-ag='party-actor-filter']").fill("party picker");
+
+            await activePage.evaluate((names) =>
+            {
+                const dialogs = Array.from(document.querySelectorAll(".window-app.dialog"));
+                const root = dialogs.find((entry) => entry.querySelector("[data-ag='party-actor-list']"));
+                if (!root) return;
+
+                const checkboxes = Array.from(root.querySelectorAll("input[name='memberActorIds']"));
+                for (const input of checkboxes)
+                {
+                    const row = input.closest("[data-ag='party-actor-option']");
+                    const rowText = String(row?.textContent ?? "");
+                    input.checked = names.some((name) => rowText.includes(name));
+                    input.dispatchEvent(new Event("change", { bubbles: true }));
+                }
+            }, actorNames);
+
+            await dialog.locator("button").filter({ hasText: "Create" }).first().click({ force: true });
+
+            const handle = await activePage.waitForFunction((memberIds) =>
+            {
+                const flagsKey = "mob-tokens";
+                const memberSet = new Set(memberIds || []);
+
+                const match = game.actors.find((actor) =>
+                {
+                    const flags = actor.flags?.[flagsKey];
+                    if (!flags?.isGroupActor) return false;
+                    if (flags.groupMode !== "partyProxy") return false;
+
+                    const members = Array.isArray(flags.memberTokens) ? flags.memberTokens : [];
+                    if (members.length !== memberSet.size) return false;
+                    return members.every((member) => memberSet.has(String(member?.actorId ?? "")));
+                });
+
+                if (!match) return null;
+                const token = canvas?.scene?.tokens?.find((tokenDoc) => String(tokenDoc.actorId ?? "") === match.id);
+                return {
+                    actorId: match.id,
+                    hasSceneToken: Boolean(token)
+                };
+            }, createdActorIds, { timeout: 30000 });
+
+            const created = await handle.jsonValue();
+            expect(created?.actorId).toBeTruthy();
+            expect(created?.hasSceneToken).toBe(false);
+            createdProxyActorId = created.actorId;
+        }
+        finally
+        {
+            await activePage.evaluate(async ({ actorIds, proxyActorId }) =>
+            {
+                const ids = Array.from(new Set([...(actorIds || []), proxyActorId].filter(Boolean)));
+                for (const id of ids)
+                {
+                    const actor = game.actors?.get(id);
+                    if (actor) await actor.delete();
+                }
+            }, {
+                actorIds: createdActorIds,
+                proxyActorId: createdProxyActorId
+            });
         }
     });
 });

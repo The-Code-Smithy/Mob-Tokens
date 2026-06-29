@@ -1,7 +1,8 @@
-import { FLAG_SCOPE, GROUP_MODE_MOB, GROUP_MODE_PARTY_PROXY } from "../core/constants.js";
+import { FLAG_SCOPE, GROUP_MODE_MOB } from "../core/constants.js";
 import { clampNumber, getInputValue, getRootElement } from "../core/helpers.js";
 import { applyHPUpdate, calculateRemainingCount, formatGroupName, getDefaultHPPerCreature, getGroupFlags, getHitPointPaths, isGroupActor, isPartyProxyGroupActor } from "../actors/group-model.js";
 import { formatMoraleStatus, resetMoraleFlags } from "../actors/morale.js";
+import { createPartyProxyGroupActor, createPartyProxyGroupFromActors, splitPartyProxyGroupActor } from "../actors/pc-group.js";
 import { getSystemAdapter } from "../systems/system-adapter.js";
 
 const TEMPLATE_BASE_PATH = "modules/mob-tokens/templates";
@@ -105,6 +106,123 @@ export async function openCreateGroupDialog(actor)
             });
 
             countInput.trigger("focus");
+        }
+    }).render(true);
+}
+
+export async function openCreatePartyGroupFromActorsDialog(seedActor = null)
+{
+    const allActors = Array.from(game.actors?.contents ?? [])
+        .filter((actor) => actor instanceof Actor)
+        .filter((actor) => !isGroupActor(actor))
+        .sort((left, right) => String(left.name ?? "").localeCompare(String(right.name ?? "")));
+
+    if (allActors.length < 2)
+    {
+        ui.notifications?.warn(game.i18n.localize("MOBTOKENS.Errors.InvalidPartyActorSelectionCount"));
+        return null;
+    }
+
+    const actorRows = allActors.map((actor) =>
+    {
+        const actorName = String(actor.name ?? "-");
+        const escapedName = foundry.utils.escapeHTML(actorName);
+        const escapedType = foundry.utils.escapeHTML(String(actor.type ?? ""));
+        const checked = seedActor?.id === actor.id ? " checked" : "";
+        return `
+            <label class="mob-tokens-party-actor-option" data-ag="party-actor-option" data-actor-name="${foundry.utils.escapeHTML(actorName.toLowerCase())}" data-actor-type="${escapedType.toLowerCase()}">
+                <input type="checkbox" name="memberActorIds" value="${actor.id}"${checked}>
+                <span class="mob-tokens-party-actor-name">${escapedName}</span>
+                <small class="mob-tokens-party-actor-type">(${escapedType || "actor"})</small>
+            </label>
+        `;
+    }).join("");
+
+    const defaultGroupName = game.i18n.format("MOBTOKENS.DialogPartyGroupDefaultName", {
+        count: Math.max(seedActor ? 1 : 0, 2)
+    });
+
+    const content = `
+        <form class="mob-tokens-dialog mob-tokens-token-dialog mob-tokens-party-actors-dialog">
+            <div class="form-group">
+                <label>${game.i18n.localize("MOBTOKENS.DialogGroupName")}</label>
+                <input data-ag="create-party-group-name" type="text" name="groupName" value="${foundry.utils.escapeHTML(defaultGroupName)}" required>
+            </div>
+            <div class="form-group">
+                <label>${game.i18n.localize("MOBTOKENS.DialogPartyActorSearch")}</label>
+                <input data-ag="party-actor-filter" type="text" autocomplete="off" placeholder="${foundry.utils.escapeHTML(game.i18n.localize("MOBTOKENS.DialogPartyActorSearchPlaceholder"))}">
+            </div>
+            <div class="form-group mob-tokens-checkbox-group">
+                <label>
+                    <input data-ag="create-party-place-token" type="checkbox" name="placeTokenOnScene">
+                    ${game.i18n.localize("MOBTOKENS.DialogPlacePartyTokenOnScene")}
+                </label>
+            </div>
+            <div class="mob-tokens-party-actor-list" data-ag="party-actor-list">
+                ${actorRows}
+            </div>
+        </form>
+    `;
+
+    return new Dialog({
+        title: game.i18n.localize("MOBTOKENS.ContextCreatePartyGroup"),
+        content,
+        buttons: {
+            create: {
+                icon: "<i class=\"fas fa-check\"></i>",
+                label: game.i18n.localize("MOBTOKENS.ButtonCreate"),
+                callback: async (html) =>
+                {
+                    const groupName = String(getInputValue(html, "groupName") ?? "").trim();
+                    const placeTokenOnScene = isCheckboxChecked(html, "placeTokenOnScene");
+
+                    const root = html instanceof HTMLElement ? html : html?.[0];
+                    const selectedIds = Array.from(root?.querySelectorAll?.("input[name='memberActorIds']:checked") ?? [])
+                        .map((input) => String(input.value ?? ""))
+                        .filter(Boolean);
+                    const selectedActors = selectedIds
+                        .map((id) => game.actors?.get(id))
+                        .filter((actor) => actor instanceof Actor && !isGroupActor(actor));
+
+                    if (selectedActors.length < 2)
+                    {
+                        ui.notifications?.warn(game.i18n.localize("MOBTOKENS.Errors.InvalidPartyActorSelectionCount"));
+                        return;
+                    }
+
+                    await createPartyProxyGroupFromActors(selectedActors, {
+                        groupName,
+                        placeTokenOnScene
+                    });
+                }
+            },
+            cancel: {
+                icon: "<i class=\"fas fa-times\"></i>",
+                label: game.i18n.localize("MOBTOKENS.ButtonCancel")
+            }
+        },
+        default: "create",
+        render: (html) =>
+        {
+            const root = html instanceof HTMLElement ? html : html?.[0];
+            const searchInput = root?.querySelector?.("[data-ag='party-actor-filter']");
+            if (!(searchInput instanceof HTMLInputElement)) return;
+
+            const applyFilter = () =>
+            {
+                const query = String(searchInput.value ?? "").trim().toLowerCase();
+                const rows = Array.from(root.querySelectorAll("[data-ag='party-actor-option']"));
+                for (const row of rows)
+                {
+                    const name = String(row.getAttribute("data-actor-name") ?? "");
+                    const type = String(row.getAttribute("data-actor-type") ?? "");
+                    const isMatch = !query || name.includes(query) || type.includes(query);
+                    row.style.display = isMatch ? "" : "none";
+                }
+            };
+
+            searchInput.addEventListener("input", applyFilter);
+            applyFilter();
         }
     }).render(true);
 }
@@ -983,208 +1101,6 @@ function shouldDisplayMoraleUI()
     {
         return false;
     }
-}
-
-async function createPartyProxyGroupActor(selectedTokens, {
-    groupName,
-    replaceSelectedTokens,
-    referenceToken
-} = {})
-{
-    const scene = canvas?.scene;
-    if (!scene)
-    {
-        ui.notifications?.warn(game.i18n.localize("MOBTOKENS.Errors.NoActiveScene"));
-        return null;
-    }
-
-    const tokenEntries = (selectedTokens ?? [])
-        .map((entry) =>
-        {
-            const tokenDocument = entry?.document ?? entry;
-            const actor = tokenDocument?.actor ?? entry?.actor ?? null;
-            if (!(actor instanceof Actor) || !tokenDocument?.id) return null;
-
-            return {
-                actor,
-                tokenDocument
-            };
-        })
-        .filter(Boolean);
-
-    if (tokenEntries.length < 2)
-    {
-        ui.notifications?.warn(game.i18n.localize("MOBTOKENS.Errors.InvalidTokenSelectionCount"));
-        return null;
-    }
-
-    const sourceActor = tokenEntries[0].actor;
-    const resolvedGroupName = String(groupName ?? "").trim()
-        || game.i18n.format("MOBTOKENS.DialogPartyGroupDefaultName", { count: tokenEntries.length });
-    const actorData = sourceActor.toObject();
-    delete actorData._id;
-    actorData.name = resolvedGroupName;
-    actorData.prototypeToken ??= {};
-    actorData.prototypeToken.name = resolvedGroupName;
-    actorData.prototypeToken.actorLink = true;
-
-    actorData.ownership = buildPartyProxyOwnership(tokenEntries.map((entry) => entry.actor));
-
-    actorData.flags ??= {};
-    actorData.flags[FLAG_SCOPE] = {
-        ...(actorData.flags[FLAG_SCOPE] ?? {}),
-        isGroupActor: true,
-        groupMode: GROUP_MODE_PARTY_PROXY,
-        sourceActorId: sourceActor.id,
-        sourceActorName: sourceActor.name,
-        creatureCount: tokenEntries.length,
-        remainingCount: tokenEntries.length,
-        hpPerCreature: 0,
-        maxGroupHP: 0,
-        currentGroupHP: 0,
-        moraleCheckedHalf: false,
-        moraleRollTotal: null,
-        moralePassed: null,
-        isRouting: false,
-        memberTokens: tokenEntries.map((entry) => ({
-            actorId: entry.actor.id,
-            actorName: entry.actor.name,
-            tokenId: String(entry.tokenDocument.id ?? ""),
-            sceneId: String(scene.id ?? "")
-        }))
-    };
-
-    const createdActor = await Actor.create(actorData, { renderSheet: false });
-
-    const anchorToken = referenceToken?.document
-        ?? tokenEntries[0].tokenDocument
-        ?? null;
-    const anchorX = Number(anchorToken?.x) || 0;
-    const anchorY = Number(anchorToken?.y) || 0;
-
-    const proxyTokenDoc = await createdActor.getTokenDocument({
-        x: anchorX,
-        y: anchorY
-    });
-    const [createdToken] = await scene.createEmbeddedDocuments("Token", [proxyTokenDoc.toObject()]);
-
-    if (replaceSelectedTokens)
-    {
-        const deleteIds = tokenEntries
-            .map((entry) => entry.tokenDocument.id)
-            .filter(Boolean);
-        if (deleteIds.length > 0)
-        {
-            await scene.deleteEmbeddedDocuments("Token", deleteIds);
-        }
-    }
-
-    ui.notifications?.info(game.i18n.format("MOBTOKENS.Notifications.PartyGroupCreated", {
-        name: createdActor.name,
-        count: tokenEntries.length
-    }));
-
-    return {
-        actor: createdActor,
-        token: createdToken ?? null
-    };
-}
-
-async function splitPartyProxyGroupActor(groupActor, referenceToken)
-{
-    const scene = canvas?.scene;
-    if (!scene)
-    {
-        ui.notifications?.warn(game.i18n.localize("MOBTOKENS.Errors.NoActiveScene"));
-        return;
-    }
-
-    const flags = getGroupFlags(groupActor);
-    const members = Array.isArray(flags.memberTokens) ? flags.memberTokens : [];
-    if (members.length < 1)
-    {
-        ui.notifications?.warn(game.i18n.localize("MOBTOKENS.Errors.PartyGroupMembersMissing"));
-        return;
-    }
-
-    const anchorDocument = referenceToken?.document
-        ?? groupActor.getActiveTokens?.()[0]?.document
-        ?? null;
-    if (!anchorDocument)
-    {
-        ui.notifications?.warn(game.i18n.localize("MOBTOKENS.Errors.TokenNotFound"));
-        return;
-    }
-
-    const gridSize = Number(canvas?.grid?.size) || 100;
-    const baseX = Number(anchorDocument.x) || 0;
-    const baseY = Number(anchorDocument.y) || 0;
-    const tokenData = [];
-    let missingCount = 0;
-
-    for (let index = 0; index < members.length; index++)
-    {
-        const member = members[index] ?? {};
-        const memberActor = game.actors?.get(String(member.actorId ?? ""));
-        if (!(memberActor instanceof Actor))
-        {
-            missingCount += 1;
-            continue;
-        }
-
-        const tokenDoc = await memberActor.getTokenDocument({
-            x: baseX + (gridSize * index),
-            y: baseY
-        });
-        tokenData.push(tokenDoc.toObject());
-    }
-
-    if (tokenData.length < 1)
-    {
-        ui.notifications?.warn(game.i18n.localize("MOBTOKENS.Errors.PartyGroupMembersMissing"));
-        return;
-    }
-
-    await scene.createEmbeddedDocuments("Token", tokenData);
-
-    if (anchorDocument.id)
-    {
-        await scene.deleteEmbeddedDocuments("Token", [anchorDocument.id]);
-    }
-    await groupActor.delete();
-
-    if (missingCount > 0)
-    {
-        ui.notifications?.warn(game.i18n.format("MOBTOKENS.Errors.PartyGroupMembersPartialMissing", {
-            count: missingCount
-        }));
-    }
-
-    ui.notifications?.info(game.i18n.format("MOBTOKENS.Notifications.PartyGroupSplit", {
-        count: tokenData.length
-    }));
-}
-
-function buildPartyProxyOwnership(actors)
-{
-    const ownership = { default: 0 };
-    for (const actor of actors)
-    {
-        const actorOwnership = actor?.ownership ?? {};
-        for (const [userId, level] of Object.entries(actorOwnership))
-        {
-            const numericLevel = Number(level);
-            if (!Number.isFinite(numericLevel)) continue;
-
-            const current = Number(ownership[userId] ?? Number.NEGATIVE_INFINITY);
-            if (!Number.isFinite(current) || numericLevel > current)
-            {
-                ownership[userId] = numericLevel;
-            }
-        }
-    }
-
-    return ownership;
 }
 
 export async function createGroupActor(sourceActor, {
