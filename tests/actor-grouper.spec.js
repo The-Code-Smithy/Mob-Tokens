@@ -17,7 +17,7 @@ async function getGroupNameCounts(page, baseName)
 {
     return page.evaluate((sourceName) =>
     {
-        const flagsKey = "actor-group";
+        const flagsKey = "mob-tokens";
         return game.actors
             .filter((actor) =>
             {
@@ -89,7 +89,7 @@ async function waitForNewGroupActorId(page, sourceName, baselineIds, creatureCou
     const handle = await page.waitForFunction(({ baseName, previousIds, count }) =>
     {
         const previous = new Set(previousIds || []);
-        const flagsKey = "actor-group";
+        const flagsKey = "mob-tokens";
 
         const match = game.actors.find((actor) =>
         {
@@ -131,7 +131,7 @@ async function setupGroupedTokensForHudTest(page, baseActorName)
 {
     return page.evaluate(async (sourceName) =>
     {
-        const flagsKey = "actor-group";
+        const flagsKey = "mob-tokens";
         const normalize = (value) => String(value ?? "").trim().replace(/\s+/g, " ").toLowerCase();
 
         let sourceActor = game.actors.find((actor) => normalize(actor.name) === normalize(sourceName));
@@ -270,6 +270,224 @@ async function cleanupHudTestArtifacts(page, payload)
     }, payload);
 }
 
+async function setupPartyTokensForProxyTest(page)
+{
+    return page.evaluate(async () =>
+    {
+        const actorType = game.system?.documentTypes?.Actor?.[0] ?? "character";
+        const stamp = `${Date.now()}-${Math.floor(Math.random() * 10000)}`;
+        const createdActors = [];
+
+        const createMember = async (suffix) =>
+        {
+            const actor = await Actor.create({
+                name: `Party Proxy Member ${suffix} ${stamp}`,
+                type: actorType
+            }, { renderSheet: false });
+            createdActors.push(actor);
+            return actor;
+        };
+
+        const members = [
+            await createMember("A"),
+            await createMember("B")
+        ];
+
+        let scene = canvas?.scene;
+        let createdSceneId = null;
+        if (!scene)
+        {
+            const tempScene = await Scene.create({
+                name: `Mob Tokens Party Proxy Test ${stamp}`,
+                navigation: false,
+                active: true
+            });
+            await tempScene.activate();
+            const started = Date.now();
+            while (Date.now() - started < 15000)
+            {
+                const activeSceneId = canvas?.scene?.id;
+                if (canvas?.ready && activeSceneId === tempScene.id) break;
+                await new Promise((resolve) => setTimeout(resolve, 100));
+            }
+            scene = canvas?.scene;
+            createdSceneId = tempScene.id;
+        }
+
+        if (!scene) throw new Error("No active scene available.");
+
+        const startX = 1500;
+        const startY = 900;
+        const spacing = Number(canvas?.grid?.size) || 100;
+        const tokenData = [];
+
+        for (let index = 0; index < members.length; index++)
+        {
+            const tokenDoc = await members[index].getTokenDocument({
+                x: startX + (spacing * index),
+                y: startY
+            });
+            tokenData.push(tokenDoc.toObject());
+        }
+
+        const createdTokens = await scene.createEmbeddedDocuments("Token", tokenData);
+
+        await canvas.tokens?.releaseAll();
+        const tokenObjects = createdTokens
+            .map((doc) => canvas.tokens?.get(doc.id))
+            .filter(Boolean);
+
+        tokenObjects.forEach((token, index) => token.control({ releaseOthers: index === 0 }));
+        if (tokenObjects[0])
+        {
+            const tokenHud = ui?.hud?.token ?? canvas?.hud?.token;
+            if (tokenHud?.bind)
+            {
+                await tokenHud.bind(tokenObjects[0]);
+            }
+        }
+
+        return {
+            memberActorIds: members.map((actor) => actor.id),
+            memberTokenIds: createdTokens.map((token) => token.id),
+            createdSceneId
+        };
+    });
+}
+
+async function cleanupPartyProxyTestArtifacts(page, payload)
+{
+    if (!payload) return;
+    if (page?.isClosed?.()) return;
+
+    await page.evaluate(async ({ memberActorIds, memberTokenIds, createdSceneId }) =>
+    {
+        const flagsKey = "mob-tokens";
+        const memberSet = new Set((memberActorIds || []).filter(Boolean));
+        const proxies = game.actors.filter((actor) =>
+        {
+            const flags = actor.flags?.[flagsKey];
+            if (!flags?.isGroupActor) return false;
+            if (flags.groupMode !== "partyProxy") return false;
+
+            const members = Array.isArray(flags.memberTokens) ? flags.memberTokens : [];
+            return members.some((member) => memberSet.has(String(member?.actorId ?? "")));
+        });
+
+        const proxyActorIds = proxies.map((actor) => actor.id);
+        const tokenIdsToDelete = new Set((memberTokenIds || []).filter(Boolean));
+        const actorIdsToDelete = new Set([...memberSet, ...proxyActorIds]);
+
+        const scene = canvas?.scene;
+        if (scene)
+        {
+            for (const tokenDoc of scene.tokens.contents)
+            {
+                if (actorIdsToDelete.has(String(tokenDoc.actorId ?? "")))
+                {
+                    tokenIdsToDelete.add(tokenDoc.id);
+                }
+            }
+
+            const ids = Array.from(tokenIdsToDelete);
+            const existingIds = ids.filter((id) => scene.tokens.has(id));
+            if (existingIds.length > 0)
+            {
+                await scene.deleteEmbeddedDocuments("Token", existingIds);
+            }
+        }
+
+        for (const actorId of actorIdsToDelete)
+        {
+            const actor = game.actors?.get(actorId);
+            if (actor) await actor.delete();
+        }
+
+        if (createdSceneId)
+        {
+            const createdScene = game.scenes?.get(createdSceneId);
+            if (createdScene) await createdScene.delete();
+        }
+
+        canvas.tokens?.releaseAll();
+        ui.hud?.token?.clear();
+    }, payload);
+}
+
+async function bindTokenHudById(page, tokenId)
+{
+    return page.evaluate(async (id) =>
+    {
+        const token = canvas?.tokens?.get(id);
+        if (!token) return false;
+
+        await canvas.tokens?.releaseAll();
+        token.control({ releaseOthers: true });
+
+        const tokenHud = ui?.hud?.token ?? canvas?.hud?.token;
+        if (tokenHud?.bind)
+        {
+            await tokenHud.bind(token);
+        }
+
+        return true;
+    }, tokenId);
+}
+
+async function installNotificationCapture(page)
+{
+    if (page?.isClosed?.()) return;
+    await page.evaluate(() =>
+    {
+        const notifications = ui?.notifications;
+        if (!notifications) return;
+
+        window.__mobTokensCapturedNotifications = [];
+
+        if (!notifications.__mobTokensOriginalWarn)
+        {
+            notifications.__mobTokensOriginalWarn = notifications.warn?.bind(notifications);
+        }
+        if (!notifications.__mobTokensOriginalInfo)
+        {
+            notifications.__mobTokensOriginalInfo = notifications.info?.bind(notifications);
+        }
+
+        notifications.warn = (message, ...args) =>
+        {
+            window.__mobTokensCapturedNotifications.push({ level: "warn", message: String(message ?? "") });
+            return notifications.__mobTokensOriginalWarn?.(message, ...args);
+        };
+
+        notifications.info = (message, ...args) =>
+        {
+            window.__mobTokensCapturedNotifications.push({ level: "info", message: String(message ?? "") });
+            return notifications.__mobTokensOriginalInfo?.(message, ...args);
+        };
+    });
+}
+
+async function restoreNotificationCapture(page)
+{
+    if (page?.isClosed?.()) return;
+    await page.evaluate(() =>
+    {
+        const notifications = ui?.notifications;
+        if (!notifications) return;
+
+        if (notifications.__mobTokensOriginalWarn)
+        {
+            notifications.warn = notifications.__mobTokensOriginalWarn;
+            delete notifications.__mobTokensOriginalWarn;
+        }
+        if (notifications.__mobTokensOriginalInfo)
+        {
+            notifications.info = notifications.__mobTokensOriginalInfo;
+            delete notifications.__mobTokensOriginalInfo;
+        }
+    });
+}
+
 test.describe("Actor Group module UI", () =>
 {
     test("opens the Create Group dialog from actor directory context menu", async ({ page }) =>
@@ -329,7 +547,7 @@ test.describe("Actor Group module UI", () =>
             {
                 const state = await activePage.evaluate(({ splitActorId, baseline, sourceName }) =>
                 {
-                    const flagsKey = "actor-group";
+                    const flagsKey = "mob-tokens";
                     const splitActor = game.actors.get(splitActorId);
                     const splitRemaining = Number(splitActor?.flags?.[flagsKey]?.remainingCount || 0);
 
@@ -400,7 +618,7 @@ test.describe("Actor Group module UI", () =>
 
             await activePage.waitForFunction(({ splitActorId, baseline, sourceName }) =>
             {
-                const flagsKey = "actor-group";
+                const flagsKey = "mob-tokens";
                 const splitActor = game.actors.get(splitActorId);
                 const splitRemaining = Number(splitActor?.flags?.[flagsKey]?.remainingCount || 0);
 
@@ -459,7 +677,7 @@ test.describe("Actor Group module UI", () =>
             {
                 const state = await activePage.evaluate(({ splitActorId, baseline, sourceName }) =>
                 {
-                    const flagsKey = "actor-group";
+                    const flagsKey = "mob-tokens";
                     const splitActor = game.actors.get(splitActorId);
                     const splitRemaining = Number(splitActor?.flags?.[flagsKey]?.remainingCount || 0);
 
@@ -513,6 +731,256 @@ test.describe("Actor Group module UI", () =>
         finally
         {
             await cleanupHudTestArtifacts(activePage, artifacts);
+        }
+    });
+});
+
+test.describe("Party Proxy group UI flow", () =>
+{
+    test("creates, moves, and splits a party proxy group from HUD", async ({ page }) =>
+    {
+        const activePage = await loginToFoundry(page);
+        await dismissQuickStartPromptIfPresent(activePage);
+
+        let artifacts = null;
+        try
+        {
+            artifacts = await setupPartyTokensForProxyTest(activePage);
+
+            await activePage.waitForFunction(() =>
+            {
+                const button = document.querySelector(".control-icon.mob-tokens-create-party-group");
+                return Boolean(button && button.offsetParent !== null);
+            }, null, { timeout: 20000 });
+
+            await activePage.evaluate(() =>
+            {
+                const button = document.querySelector(".control-icon.mob-tokens-create-party-group");
+                button?.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
+            });
+
+            await activePage.waitForFunction(() =>
+                Boolean(document.querySelector(".window-app.dialog [data-ag='create-party-group-name']"))
+                , null, { timeout: 20000 });
+
+            const createDialog = activePage.locator(".window-app.dialog [data-ag='create-party-group-name']").last();
+
+            const proxyName = `Party Proxy Test ${Date.now()}`;
+            await createDialog.fill(proxyName);
+            await activePage.evaluate(() =>
+            {
+                const dialogs = Array.from(document.querySelectorAll(".window-app.dialog"));
+                const dialog = dialogs.find((entry) => entry.querySelector("[data-ag='create-party-group-name']"));
+                const createButton = dialog?.querySelector("button.default, button[type='submit'], button");
+                createButton?.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
+            });
+
+            const created = await activePage.waitForFunction((payload) =>
+            {
+                const flagsKey = "mob-tokens";
+                const memberSet = new Set(payload.memberActorIds || []);
+                const actor = game.actors.find((candidate) =>
+                {
+                    const flags = candidate.flags?.[flagsKey];
+                    if (!flags?.isGroupActor) return false;
+                    if (flags.groupMode !== "partyProxy") return false;
+                    if (candidate.name !== payload.proxyName) return false;
+
+                    const members = Array.isArray(flags.memberTokens) ? flags.memberTokens : [];
+                    if (members.length !== memberSet.size) return false;
+                    return members.every((member) => memberSet.has(String(member?.actorId ?? "")));
+                });
+
+                if (!actor) return null;
+                const token = canvas?.scene?.tokens?.find((tokenDoc) => String(tokenDoc.actorId ?? "") === actor.id);
+                return token
+                    ? { actorId: actor.id, tokenId: token.id }
+                    : null;
+            }, {
+                memberActorIds: artifacts.memberActorIds,
+                proxyName
+            }, { timeout: 30000 });
+
+            const createdData = await created.jsonValue();
+            expect(createdData?.actorId).toBeTruthy();
+            expect(createdData?.tokenId).toBeTruthy();
+
+            await activePage.waitForFunction((ids) =>
+            {
+                const docs = canvas?.scene?.tokens ?? [];
+                return ids.every((id) => !docs.get(id));
+            }, artifacts.memberTokenIds, { timeout: 20000 });
+
+            const movedPosition = await activePage.evaluate(async (tokenId) =>
+            {
+                const tokenDoc = canvas?.scene?.tokens?.get(tokenId);
+                if (!tokenDoc) return null;
+
+                const beforeX = Number(tokenDoc.x);
+                const beforeY = Number(tokenDoc.y);
+                const nextX = Number(tokenDoc.x) + 200;
+                const nextY = Number(tokenDoc.y) + 100;
+                await tokenDoc.update({ x: nextX, y: nextY });
+                return {
+                    beforeX,
+                    beforeY,
+                    afterX: Number(tokenDoc.x),
+                    afterY: Number(tokenDoc.y)
+                };
+            }, createdData.tokenId);
+
+            expect(movedPosition).toBeTruthy();
+
+            const bound = await bindTokenHudById(activePage, createdData.tokenId);
+            expect(bound).toBe(true);
+
+            await activePage.waitForFunction(() =>
+            {
+                const button = document.querySelector(".control-icon.mob-tokens-split-party-group");
+                return Boolean(button && button.offsetParent !== null);
+            }, null, { timeout: 20000 });
+
+            await activePage.evaluate(() =>
+            {
+                const button = document.querySelector(".control-icon.mob-tokens-split-party-group");
+                button?.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
+            });
+
+            await activePage.waitForFunction((payload) =>
+            {
+                const actor = game.actors?.get(payload.proxyActorId);
+                if (actor) return false;
+
+                const proxyToken = canvas?.scene?.tokens?.get(payload.proxyTokenId);
+                if (proxyToken) return false;
+
+                const memberTokens = (canvas?.scene?.tokens?.contents || []).filter((tokenDoc) =>
+                    payload.memberActorIds.includes(String(tokenDoc.actorId ?? ""))
+                );
+                if (memberTokens.length !== payload.memberActorIds.length) return false;
+
+                return true;
+            }, {
+                proxyActorId: createdData.actorId,
+                proxyTokenId: createdData.tokenId,
+                memberActorIds: artifacts.memberActorIds
+            }, { timeout: 30000 });
+        }
+        finally
+        {
+            await cleanupPartyProxyTestArtifacts(activePage, artifacts);
+        }
+    });
+
+    test("split warns when one party proxy member actor is missing", async ({ page }) =>
+    {
+        const activePage = await loginToFoundry(page);
+        await dismissQuickStartPromptIfPresent(activePage);
+
+        let artifacts = null;
+        try
+        {
+            artifacts = await setupPartyTokensForProxyTest(activePage);
+            await installNotificationCapture(activePage);
+
+            await activePage.waitForFunction(() =>
+            {
+                const button = document.querySelector(".control-icon.mob-tokens-create-party-group");
+                return Boolean(button && button.offsetParent !== null);
+            }, null, { timeout: 20000 });
+
+            await activePage.evaluate(() =>
+            {
+                const button = document.querySelector(".control-icon.mob-tokens-create-party-group");
+                button?.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
+            });
+            await activePage.waitForFunction(() =>
+                Boolean(document.querySelector(".window-app.dialog [data-ag='create-party-group-name']"))
+                , null, { timeout: 20000 });
+            await activePage.evaluate(() =>
+            {
+                const dialogs = Array.from(document.querySelectorAll(".window-app.dialog"));
+                const dialog = dialogs.find((entry) => entry.querySelector("[data-ag='create-party-group-name']"));
+                const createButton = dialog?.querySelector("button.default, button[type='submit'], button");
+                createButton?.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
+            });
+
+            const created = await activePage.waitForFunction((memberActorIds) =>
+            {
+                const flagsKey = "mob-tokens";
+                const memberSet = new Set(memberActorIds || []);
+                const actor = game.actors.find((candidate) =>
+                {
+                    const flags = candidate.flags?.[flagsKey];
+                    if (!flags?.isGroupActor) return false;
+                    if (flags.groupMode !== "partyProxy") return false;
+
+                    const members = Array.isArray(flags.memberTokens) ? flags.memberTokens : [];
+                    if (members.length !== memberSet.size) return false;
+                    return members.every((member) => memberSet.has(String(member?.actorId ?? "")));
+                });
+
+                if (!actor) return null;
+                const token = canvas?.scene?.tokens?.find((tokenDoc) => String(tokenDoc.actorId ?? "") === actor.id);
+                return token
+                    ? { actorId: actor.id, tokenId: token.id }
+                    : null;
+            }, artifacts.memberActorIds, { timeout: 30000 });
+
+            const createdData = await created.jsonValue();
+            expect(createdData?.actorId).toBeTruthy();
+            expect(createdData?.tokenId).toBeTruthy();
+
+            await activePage.evaluate(async (missingActorId) =>
+            {
+                const actor = game.actors?.get(missingActorId);
+                if (actor) await actor.delete();
+            }, artifacts.memberActorIds[0]);
+
+            const bound = await bindTokenHudById(activePage, createdData.tokenId);
+            expect(bound).toBe(true);
+
+            await activePage.waitForFunction(() =>
+            {
+                const button = document.querySelector(".control-icon.mob-tokens-split-party-group");
+                return Boolean(button && button.offsetParent !== null);
+            }, null, { timeout: 20000 });
+
+            await activePage.evaluate(() =>
+            {
+                const button = document.querySelector(".control-icon.mob-tokens-split-party-group");
+                button?.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
+            });
+
+            await activePage.waitForFunction((payload) =>
+            {
+                const actor = game.actors?.get(payload.proxyActorId);
+                if (actor) return false;
+                const proxyToken = canvas?.scene?.tokens?.get(payload.proxyTokenId);
+                if (proxyToken) return false;
+                return true;
+            }, {
+                proxyActorId: createdData.actorId,
+                proxyTokenId: createdData.tokenId
+            }, { timeout: 30000 });
+
+            const warningSeen = await activePage.evaluate(() =>
+            {
+                const entries = Array.isArray(window.__mobTokensCapturedNotifications)
+                    ? window.__mobTokensCapturedNotifications
+                    : [];
+                return entries.some((entry) =>
+                    entry.level === "warn"
+                    && String(entry.message || "").toLowerCase().includes("missing")
+                );
+            });
+
+            expect(warningSeen).toBe(true);
+        }
+        finally
+        {
+            await restoreNotificationCapture(activePage);
+            await cleanupPartyProxyTestArtifacts(activePage, artifacts);
         }
     });
 });

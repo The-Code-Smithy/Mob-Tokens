@@ -1,5 +1,5 @@
 import { FLAG_SCOPE, MODULE_ID, UPDATE_GUARD } from "./core/constants.js";
-import { getActorFromDirectoryLi, isGroupActor } from "./actors/group-model.js";
+import { getActorFromDirectoryLi, isGroupActor, isMobGroupActor } from "./actors/group-model.js";
 import
 {
     injectTokenHudGroupAction,
@@ -13,10 +13,12 @@ import
 import { syncGroupActor } from "./actors/group-sync.js";
 import { removeTokenCountBadge, renderTokenCountBadge } from "./actors/actor-badge.js";
 import { ensureUniqueGroupActorToken } from "./actors/group-token-isolation.js";
+import { getSystemAdapter } from "./systems/system-adapter.js";
 
 Hooks.once("init", () =>
 {
     console.log(`${MODULE_ID} | Initializing`);
+    const defaultMoraleEnabled = getSystemAdapter().moraleEnabledByDefault;
 
     game.settings.register(MODULE_ID, "enableMoraleCheck", {
         name: "Enable 50% morale checks",
@@ -24,12 +26,21 @@ Hooks.once("init", () =>
         scope: "world",
         config: true,
         type: Boolean,
-        default: true
+        default: defaultMoraleEnabled
     });
 
     game.settings.register(MODULE_ID, "welcomePromptSeen", {
         name: "Mob Tokens Welcome Prompt Seen",
         hint: "Tracks whether the world has already shown the Mob Tokens quick-start prompt.",
+        scope: "world",
+        config: false,
+        type: Boolean,
+        default: false
+    });
+
+    game.settings.register(MODULE_ID, "moraleSettingInitialized", {
+        name: "Mob Tokens Morale Setting Initialized",
+        hint: "Tracks whether morale default has been initialized for this world.",
         scope: "world",
         config: false,
         type: Boolean,
@@ -41,12 +52,24 @@ Hooks.once("ready", async () =>
 {
     if (!game.user?.isGM) return;
 
+    await ensureMoraleSettingInitialized();
+
     const welcomePromptSeen = game.settings.get(MODULE_ID, "welcomePromptSeen");
     if (welcomePromptSeen) return;
 
     await game.settings.set(MODULE_ID, "welcomePromptSeen", true);
     await showQuickStartPrompt();
 });
+
+async function ensureMoraleSettingInitialized()
+{
+    const initialized = Boolean(game.settings.get(MODULE_ID, "moraleSettingInitialized"));
+    if (initialized) return;
+
+    const enabledByDefault = getSystemAdapter().moraleEnabledByDefault;
+    await game.settings.set(MODULE_ID, "enableMoraleCheck", enabledByDefault);
+    await game.settings.set(MODULE_ID, "moraleSettingInitialized", true);
+}
 
 Hooks.on("getActorContextOptions", (_app, entryOptions) =>
 {
@@ -56,7 +79,7 @@ Hooks.on("getActorContextOptions", (_app, entryOptions) =>
 Hooks.on("updateActor", async (actor, _changed, options) =>
 {
     if (options?.[UPDATE_GUARD]) return;
-    if (!isGroupActor(actor)) return;
+    if (!isMobGroupActor(actor)) return;
     await syncGroupActor(actor);
     refreshOpenGroupPanels(actor);
 });
@@ -64,7 +87,7 @@ Hooks.on("updateActor", async (actor, _changed, options) =>
 Hooks.on("renderActorSheetV2", async (app, element) =>
 {
     const actor = app.actor ?? app.document;
-    if (!(actor instanceof Actor) || !isGroupActor(actor)) return;
+    if (!(actor instanceof Actor) || !isMobGroupActor(actor)) return;
     await injectGroupPanel(actor, element);
     wireGroupPanelActions(actor, element);
 });
@@ -143,7 +166,7 @@ function addActorContextEntries(entryOptions)
             if (!game.user?.isGM) return false;
             const actor = getActorFromDirectoryLi(li);
             if (!(actor instanceof Actor)) return false;
-            if (!isGroupActor(actor)) return false;
+            if (!isMobGroupActor(actor)) return false;
             const remainingCount = Number(actor.flags?.[FLAG_SCOPE]?.remainingCount) || 0;
             return remainingCount > 1;
         },

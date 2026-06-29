@@ -11,13 +11,27 @@
                                 data-ag-field="hpPerCreature">{{hpPerCreature}}</span></div>
                 <div><strong>{{localize "MOBTOKENS.PanelTotalHP"}}</strong><span
                                 data-ag-field="maxGroupHP">{{maxGroupHP}}</span></div>
-                <div><strong>{{localize "MOBTOKENS.PanelCurrentHP"}}</strong><span
-                                data-ag-field="currentGroupHP">{{currentGroupHP}}</span></div>
-                <div><strong>{{localize "MOBTOKENS.PanelMorale"}}</strong><span
+                <div>
+                        <strong>{{localize "MOBTOKENS.PanelCurrentHP"}}</strong>
+                        {{#if isGM}}
+                        <div class="mob-tokens-inline-edit">
+                                <input type="text" inputmode="decimal" class="mob-tokens-current-hp-input"
+                                        data-ag-input="currentGroupHP" value="{{currentGroupHP}}" />
+                        </div>
+                        {{else}}
+                        <span data-ag-field="currentGroupHP">{{currentGroupHP}}</span>
+                        {{/if}}
+                </div>
+                {{#if showMorale}}
+                <div data-ag-section="morale-row"><strong>{{localize "MOBTOKENS.PanelMorale"}}</strong><span
                                 data-ag-field="moraleStatus">{{moraleStatus}}</span></div>
+                {{/if}}
         </div>
+        {{#if showMorale}}
         {{#if isGM}}
-        <div class="mob-tokens-actions"><button type="button" class="mob-tokens-reset-morale">{{localize
+        <div class="mob-tokens-actions" data-ag-section="morale-actions"><button type="button"
+                        class="mob-tokens-reset-morale mob-tokens-button">{{localize
                         "MOBTOKENS.PanelResetMorale"}}</button></div>
+        {{/if}}
         {{/if}}
 </section>

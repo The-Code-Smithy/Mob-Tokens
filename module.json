@@ -2,7 +2,7 @@
     "id": "mob-tokens",
     "title": "Mob Tokens",
     "description": "Combine identical creatures into a single mob token with pooled HP, split mobs mid-encounter, and track surviving creature counts automatically.",
-    "version": "0.4.0",
+    "version": "0.5.0",
     "authors": [
         {
             "name": "The Code Smithy"

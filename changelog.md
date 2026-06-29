@@ -2,8 +2,16 @@
 
 ## Unreleased
 
-- Fixed defeat sync to preserve non-defeated token overlays when applying and clearing the defeated icon.
-- Fixed token badge layering/placement so stacked token status effect icons remain visible.
+- Added system adapter scaffolding (`generic`, `dnd5e`, `osric`) to centralize system-specific behavior.
+- Added optional Morale and Armor Class fields to group creation dialogs when those fields are available on the source actor.
+- Added adapter-driven stat path resolution for creation-time Morale/AC overrides.
+
+## 0.5.0
+
+- Added group sheet Current HP editing for GMs, including signed relative input (`+N`/`-N`) and Enter/blur autosave.
+- Added focus-select behavior for sheet Current HP input for faster in-play adjustments.
+- Added system-aware morale default initialization so new dnd5e worlds start with morale checks disabled.
+- Updated morale panel visibility to follow the morale setting so toggling the setting controls both checks and UI visibility.
 
 ## 0.4.0
 

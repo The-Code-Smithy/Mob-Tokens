@@ -382,7 +382,7 @@ async function waitForActorEntryByName(page, actorName)
 async function getGroupActorCount(page)
 {
     return evaluateOrFallback(page, () =>
-        game.actors.filter((actor) => Boolean(actor.flags?.["actor-group"]?.isGroupActor)).length
+        game.actors.filter((actor) => Boolean(actor.flags?.["mob-tokens"]?.isGroupActor)).length
         , null, 0);
 }
 
@@ -390,7 +390,7 @@ async function getGroupActorIdsForSource(page, sourceActorName)
 {
     return evaluateOrFallback(page, (baseName) =>
     {
-        const flagsKey = "actor-group";
+        const flagsKey = "mob-tokens";
         return game.actors
             .filter((actor) =>
             {

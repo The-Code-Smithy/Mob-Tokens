@@ -2,6 +2,8 @@ export const MODULE_ID = "mob-tokens";
 export const FLAG_SCOPE = "mob-tokens";
 export const UPDATE_GUARD = `${MODULE_ID}.syncing`;
 export const BADGE_KEY = `${MODULE_ID}.badge`;
+export const GROUP_MODE_MOB = "mob";
+export const GROUP_MODE_PARTY_PROXY = "partyProxy";
 
 export const HP_PATH_CANDIDATES = [
     { current: "system.attributes.hp.value", max: "system.attributes.hp.max" },

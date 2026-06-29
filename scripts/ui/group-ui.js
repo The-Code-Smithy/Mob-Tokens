@@ -1,13 +1,22 @@
-import { FLAG_SCOPE } from "../core/constants.js";
+import { FLAG_SCOPE, GROUP_MODE_MOB, GROUP_MODE_PARTY_PROXY } from "../core/constants.js";
 import { clampNumber, getInputValue, getRootElement } from "../core/helpers.js";
-import { applyHPUpdate, calculateRemainingCount, formatGroupName, getDefaultHPPerCreature, getGroupFlags, getHitPointPaths, isGroupActor } from "../actors/group-model.js";
+import { applyHPUpdate, calculateRemainingCount, formatGroupName, getDefaultHPPerCreature, getGroupFlags, getHitPointPaths, isGroupActor, isPartyProxyGroupActor } from "../actors/group-model.js";
 import { formatMoraleStatus, resetMoraleFlags } from "../actors/morale.js";
+import { getSystemAdapter } from "../systems/system-adapter.js";
 
 const TEMPLATE_BASE_PATH = "modules/mob-tokens/templates";
 
 async function renderActorGrouperTemplate(templateName, data = {})
 {
-    return renderTemplate(`${TEMPLATE_BASE_PATH}/${templateName}.hbs`, data);
+    const templatePath = `${TEMPLATE_BASE_PATH}/${templateName}.hbs`;
+    const renderFn = foundry?.applications?.handlebars?.renderTemplate
+        ?? globalThis.renderTemplate;
+    if (typeof renderFn !== "function")
+    {
+        throw new Error("Mob Tokens could not find a template renderer.");
+    }
+
+    return renderFn(templatePath, data);
 }
 
 function isCheckboxChecked(html, name)
@@ -27,11 +36,16 @@ export async function openCreateGroupDialog(actor)
     const defaultName = formatGroupName(actor.name, 1);
     const defaultFolderId = actor.folder?.id ?? "";
     const folderOptions = getActorFolderOptions(defaultFolderId);
+    const createStats = getCreateDialogStatConfig(actor);
     const content = await renderActorGrouperTemplate("dialog-create-group", {
         sourceActorName: actor.name,
         defaultGroupName: defaultName,
         defaultHP,
-        folderOptions
+        folderOptions,
+        showMoraleField: createStats.showMoraleField,
+        defaultMorale: createStats.defaultMorale,
+        showArmorClassField: createStats.showArmorClassField,
+        defaultArmorClass: createStats.defaultArmorClass
     });
 
     return new Dialog({
@@ -47,7 +61,23 @@ export async function openCreateGroupDialog(actor)
                     const folderId = getFolderIdFromInput(getInputValue(html, "targetFolder"));
                     const creatureCount = Number(getInputValue(html, "creatureCount"));
                     const hpPerCreature = Number(getInputValue(html, "hpPerCreature"));
-                    await createGroupActor(actor, { groupName, folderId, creatureCount, hpPerCreature });
+                    const moraleValue = createStats.showMoraleField
+                        ? parseOptionalNumericInput(getInputValue(html, "morale"))
+                        : null;
+                    const armorClassValue = createStats.showArmorClassField
+                        ? parseOptionalNumericInput(getInputValue(html, "armorClass"))
+                        : null;
+
+                    await createGroupActor(actor, {
+                        groupName,
+                        folderId,
+                        creatureCount,
+                        hpPerCreature,
+                        moralePath: createStats.moralePath,
+                        moraleValue,
+                        armorClassPath: createStats.armorClassPath,
+                        armorClassValue
+                    });
                 }
             },
             cancel: {
@@ -89,49 +119,110 @@ export function injectTokenHudGroupAction(token, html)
     if (existingCreate) existingCreate.remove();
     const existingSplit = root.querySelector(".control-icon.mob-tokens-split-group");
     if (existingSplit) existingSplit.remove();
+    const existingCreateParty = root.querySelector(".control-icon.mob-tokens-create-party-group");
+    if (existingCreateParty) existingCreateParty.remove();
+    const existingSplitParty = root.querySelector(".control-icon.mob-tokens-split-party-group");
+    if (existingSplitParty) existingSplitParty.remove();
 
     const host = root.querySelector(".col.right") ?? root.querySelector(".right") ?? root;
 
     const selection = getSelectedTokenGroupingData(token);
     if (selection)
     {
-        const createButton = document.createElement("div");
-        createButton.classList.add("control-icon", "mob-tokens-create-group");
-        createButton.dataset.action = "mob-tokens-create-group";
-        createButton.title = game.i18n.localize("MOBTOKENS.HudCreateGroupFromSelection");
-        createButton.innerHTML = "<i class=\"fas fa-people-group\"></i>";
-
-        createButton.addEventListener("click", async (event) =>
-        {
-            event.preventDefault();
-            event.stopPropagation();
-            await openCreateGroupFromTokensDialog(selection.tokens, selection.sourceActor, token, selection.totalCreatureCount);
+        const createButton = createTokenHudControlButton({
+            cssClass: "mob-tokens-create-group",
+            action: "mob-tokens-create-group",
+            title: game.i18n.localize("MOBTOKENS.HudCreateGroupFromSelection"),
+            iconClass: "fa-people-group",
+            onClick: async (event) =>
+            {
+                event.preventDefault();
+                event.stopPropagation();
+                await openCreateGroupFromTokensDialog(selection.tokens, selection.sourceActor, token, selection.totalCreatureCount);
+            }
         });
 
         host.prepend(createButton);
     }
 
+    const partySelection = getSelectedPartyTokenGroupingData(token);
+    if (partySelection)
+    {
+        const createPartyButton = createTokenHudControlButton({
+            cssClass: "mob-tokens-create-party-group",
+            action: "mob-tokens-create-party-group",
+            title: game.i18n.localize("MOBTOKENS.HudCreatePartyGroupFromSelection"),
+            iconClass: "fa-users",
+            onClick: async (event) =>
+            {
+                event.preventDefault();
+                event.stopPropagation();
+                await openCreatePartyGroupDialog(partySelection.tokens, token);
+            }
+        });
+
+        host.prepend(createPartyButton);
+    }
+
     const splitData = getSplitTokenGroupingData(token);
     if (splitData)
     {
-        const splitButton = document.createElement("div");
-        splitButton.classList.add("control-icon", "mob-tokens-split-group");
-        splitButton.dataset.action = "mob-tokens-split-group";
-        splitButton.title = game.i18n.localize("MOBTOKENS.HudSplitGroupFromToken");
-        splitButton.innerHTML = "<i class=\"fas fa-code-branch\"></i>";
-
-        splitButton.addEventListener("click", async (event) =>
-        {
-            event.preventDefault();
-            event.stopPropagation();
-            await openSplitGroupDialog(splitData.groupActor, {
-                placeCreatedTokens: true,
-                referenceToken: token
-            });
+        const splitButton = createTokenHudControlButton({
+            cssClass: "mob-tokens-split-group",
+            action: "mob-tokens-split-group",
+            title: game.i18n.localize("MOBTOKENS.HudSplitGroupFromToken"),
+            iconClass: "fa-code-branch",
+            onClick: async (event) =>
+            {
+                event.preventDefault();
+                event.stopPropagation();
+                await openSplitGroupDialog(splitData.groupActor, {
+                    placeCreatedTokens: true,
+                    referenceToken: token
+                });
+            }
         });
 
         host.prepend(splitButton);
     }
+
+    const partySplitData = getSplitPartyTokenGroupingData(token);
+    if (partySplitData)
+    {
+        const splitPartyButton = createTokenHudControlButton({
+            cssClass: "mob-tokens-split-party-group",
+            action: "mob-tokens-split-party-group",
+            title: game.i18n.localize("MOBTOKENS.HudSplitPartyGroupFromToken"),
+            iconClass: "fa-user-group",
+            onClick: async (event) =>
+            {
+                event.preventDefault();
+                event.stopPropagation();
+                await splitPartyProxyGroupActor(partySplitData.groupActor, token);
+            }
+        });
+
+        host.prepend(splitPartyButton);
+    }
+}
+
+function createTokenHudControlButton({ cssClass, action, title, iconClass, onClick })
+{
+    const button = document.createElement("div");
+    button.classList.add("control-icon", cssClass);
+    button.dataset.action = action;
+    button.title = title;
+    button.innerHTML = `<i class="fas ${iconClass}"></i>`;
+
+    button.addEventListener("click", async (event) =>
+    {
+        if (typeof onClick === "function")
+        {
+            await onClick(event);
+        }
+    });
+
+    return button;
 }
 
 function getSplitTokenGroupingData(token)
@@ -139,10 +230,24 @@ function getSplitTokenGroupingData(token)
     const groupActor = token?.actor;
     if (!(groupActor instanceof Actor)) return null;
     if (!isGroupActor(groupActor)) return null;
+    if (isPartyProxyGroupActor(groupActor)) return null;
 
     const flags = getGroupFlags(groupActor);
     const remainingCount = Number(flags.remainingCount) || 0;
     if (remainingCount <= 1) return null;
+
+    return { groupActor };
+}
+
+function getSplitPartyTokenGroupingData(token)
+{
+    const groupActor = token?.actor;
+    if (!(groupActor instanceof Actor)) return null;
+    if (!isPartyProxyGroupActor(groupActor)) return null;
+
+    const flags = getGroupFlags(groupActor);
+    const members = Array.isArray(flags.memberTokens) ? flags.memberTokens : [];
+    if (members.length <= 1) return null;
 
     return { groupActor };
 }
@@ -162,6 +267,7 @@ async function openCreateGroupFromTokensDialog(selectedTokens, sourceActor, refe
     const defaultFolderId = sourceActor.folder?.id ?? "";
     const defaultGroupCount = 1;
     const folderOptions = getActorFolderOptions(defaultFolderId);
+    const createStats = getCreateDialogStatConfig(sourceActor);
     const createCountsHint = game.i18n.format("MOBTOKENS.DialogCreateCountsHint", { total: defaultCreatureCount });
     const content = await renderActorGrouperTemplate("dialog-create-group-from-tokens", {
         sourceActorName: sourceActor.name,
@@ -172,7 +278,11 @@ async function openCreateGroupFromTokensDialog(selectedTokens, sourceActor, refe
         defaultHP,
         maxResultGroupCount: defaultCreatureCount,
         createCountsHint,
-        folderOptions
+        folderOptions,
+        showMoraleField: createStats.showMoraleField,
+        defaultMorale: createStats.defaultMorale,
+        showArmorClassField: createStats.showArmorClassField,
+        defaultArmorClass: createStats.defaultArmorClass
     });
 
     return new Dialog({
@@ -191,6 +301,12 @@ async function openCreateGroupFromTokensDialog(selectedTokens, sourceActor, refe
                     const groupCountsRaw = String(getInputValue(html, "groupCounts") ?? "");
                     const hpPerCreature = Number(getInputValue(html, "hpPerCreature"));
                     const replaceSelectedTokens = isCheckboxChecked(html, "replaceSelectedTokens");
+                    const moraleValue = createStats.showMoraleField
+                        ? parseOptionalNumericInput(getInputValue(html, "morale"))
+                        : null;
+                    const armorClassValue = createStats.showArmorClassField
+                        ? parseOptionalNumericInput(getInputValue(html, "armorClass"))
+                        : null;
 
                     if (!Number.isInteger(resultGroupCount) || resultGroupCount < 1 || resultGroupCount > creatureCount)
                     {
@@ -238,6 +354,10 @@ async function openCreateGroupFromTokensDialog(selectedTokens, sourceActor, refe
                             creatureCount: count,
                             hpPerCreature,
                             initialCurrentHP: allocatedCurrentHP[index],
+                            moralePath: createStats.moralePath,
+                            moraleValue,
+                            armorClassPath: createStats.armorClassPath,
+                            armorClassValue,
                             renderSheet: false,
                             notify: false
                         });
@@ -310,6 +430,63 @@ async function openCreateGroupFromTokensDialog(selectedTokens, sourceActor, refe
     }).render(true);
 }
 
+async function openCreatePartyGroupDialog(selectedTokens, referenceToken)
+{
+    const tokenCount = Array.isArray(selectedTokens) ? selectedTokens.length : 0;
+    if (tokenCount < 2)
+    {
+        ui.notifications?.warn(game.i18n.localize("MOBTOKENS.Errors.InvalidTokenSelectionCount"));
+        return null;
+    }
+
+    const defaultGroupName = game.i18n.format("MOBTOKENS.DialogPartyGroupDefaultName", { count: tokenCount });
+    const content = `
+        <form class="mob-tokens-dialog mob-tokens-token-dialog">
+            <div class="form-group">
+                <label>${game.i18n.localize("MOBTOKENS.DialogSelectedTokenCount")}</label>
+                <input type="number" value="${tokenCount}" disabled>
+            </div>
+            <div class="form-group">
+                <label>${game.i18n.localize("MOBTOKENS.DialogGroupName")}</label>
+                <input data-ag="create-party-group-name" type="text" name="groupName" value="${foundry.utils.escapeHTML(defaultGroupName)}" required>
+            </div>
+            <div class="form-group mob-tokens-checkbox-group">
+                <label>
+                    <input data-ag="create-party-replace-selected-tokens" type="checkbox" name="replaceSelectedTokens" checked>
+                    ${game.i18n.localize("MOBTOKENS.DialogReplaceSelectedTokens")}
+                </label>
+            </div>
+        </form>
+    `;
+
+    return new Dialog({
+        title: game.i18n.localize("MOBTOKENS.HudCreatePartyGroupFromSelection"),
+        content,
+        buttons: {
+            create: {
+                icon: "<i class=\"fas fa-check\"></i>",
+                label: game.i18n.localize("MOBTOKENS.ButtonCreate"),
+                callback: async (html) =>
+                {
+                    const groupName = String(getInputValue(html, "groupName") ?? "").trim();
+                    const replaceSelectedTokens = isCheckboxChecked(html, "replaceSelectedTokens");
+
+                    await createPartyProxyGroupActor(selectedTokens, {
+                        groupName,
+                        replaceSelectedTokens,
+                        referenceToken
+                    });
+                }
+            },
+            cancel: {
+                icon: "<i class=\"fas fa-times\"></i>",
+                label: game.i18n.localize("MOBTOKENS.ButtonCancel")
+            }
+        },
+        default: "create"
+    }).render(true);
+}
+
 function getSelectedTokenGroupingData(token)
 {
     const selected = canvas?.tokens?.controlled ?? [];
@@ -351,6 +528,24 @@ function getSelectedTokenGroupingData(token)
         sourceActor,
         tokens,
         totalCreatureCount
+    };
+}
+
+function getSelectedPartyTokenGroupingData(token)
+{
+    const selected = canvas?.tokens?.controlled ?? [];
+    const tokens = selected.length > 0
+        ? selected
+        : (token ? [token] : []);
+
+    if (tokens.length < 2) return null;
+
+    const tokenActors = tokens.map((entry) => entry?.actor);
+    if (!tokenActors.every((actor) => actor instanceof Actor)) return null;
+    if (tokenActors.some((actor) => isGroupActor(actor))) return null;
+
+    return {
+        tokens
     };
 }
 
@@ -584,6 +779,7 @@ export async function injectGroupPanel(actor, html)
     }
 
     const flags = getGroupFlags(actor);
+    const showMorale = shouldDisplayMoraleUI();
     const panel = await renderActorGrouperTemplate("group-panel", {
         sourceActorName: flags.sourceActorName ?? "-",
         creatureCount: Number(flags.creatureCount) || 0,
@@ -592,7 +788,8 @@ export async function injectGroupPanel(actor, html)
         maxGroupHP: Number(flags.maxGroupHP) || 0,
         currentGroupHP: Number(flags.currentGroupHP) || 0,
         moraleStatus: formatMoraleStatus(flags),
-        isGM: Boolean(game.user?.isGM)
+        isGM: Boolean(game.user?.isGM),
+        showMorale
     });
 
     const target = root.querySelector("form")
@@ -610,22 +807,47 @@ export async function injectGroupPanel(actor, html)
 export function wireGroupPanelActions(actor, html)
 {
     const root = getRootElement(html);
-    const button = root?.querySelector?.(".mob-tokens-reset-morale");
-    if (!button) return;
-    if (button.dataset.actorGrouperBound === "1") return;
-    button.dataset.actorGrouperBound = "1";
+    const panel = root?.querySelector?.(".mob-tokens-panel");
+    if (!panel) return;
 
-    button.addEventListener("click", async (event) =>
+    const moraleButton = panel.querySelector(".mob-tokens-reset-morale");
+    if (moraleButton && moraleButton.dataset.actorGrouperBound !== "1")
     {
-        event.preventDefault();
-        if (!game.user?.isGM) return;
+        moraleButton.dataset.actorGrouperBound = "1";
+        moraleButton.addEventListener("click", async (event) =>
+        {
+            event.preventDefault();
+            if (!game.user?.isGM) return;
 
-        await resetMoraleFlags(actor);
-        ui.notifications?.info(game.i18n.format("MOBTOKENS.Notifications.MoraleReset", {
-            name: actor.name
-        }));
-        refreshOpenGroupPanels(actor);
-    });
+            await resetMoraleFlags(actor);
+            ui.notifications?.info(game.i18n.format("MOBTOKENS.Notifications.MoraleReset", {
+                name: actor.name
+            }));
+            refreshOpenGroupPanels(actor);
+        });
+    }
+
+    const hpInput = panel.querySelector(".mob-tokens-current-hp-input");
+    if (hpInput && hpInput.dataset.actorGrouperBound !== "1")
+    {
+        hpInput.dataset.actorGrouperBound = "1";
+        hpInput.addEventListener("focus", (event) =>
+        {
+            event.currentTarget?.select?.();
+        });
+
+        hpInput.addEventListener("blur", async () =>
+        {
+            await applyCurrentHPFromPanel(actor, panel);
+        });
+
+        hpInput.addEventListener("keydown", async (event) =>
+        {
+            if (event.key !== "Enter") return;
+            event.preventDefault();
+            await applyCurrentHPFromPanel(actor, panel);
+        });
+    }
 }
 
 export function refreshGroupPanel(actor, html)
@@ -641,7 +863,21 @@ export function refreshGroupPanel(actor, html)
     setPanelField(panel, "hpPerCreature", Number(flags.hpPerCreature) || 0);
     setPanelField(panel, "maxGroupHP", Number(flags.maxGroupHP) || 0);
     setPanelField(panel, "currentGroupHP", Number(flags.currentGroupHP) || 0);
+    setPanelInput(panel, "currentGroupHP", Number(flags.currentGroupHP) || 0);
     setPanelField(panel, "moraleStatus", formatMoraleStatus(flags));
+
+    const showMorale = shouldDisplayMoraleUI();
+    const moraleRow = panel.querySelector("[data-ag-section='morale-row']");
+    if (moraleRow instanceof HTMLElement)
+    {
+        moraleRow.style.display = showMorale ? "" : "none";
+    }
+
+    const moraleActions = panel.querySelector("[data-ag-section='morale-actions']");
+    if (moraleActions instanceof HTMLElement)
+    {
+        moraleActions.style.display = showMorale ? "" : "none";
+    }
 }
 
 export function refreshOpenGroupPanels(actor)
@@ -663,12 +899,304 @@ function setPanelField(panel, fieldName, value)
     node.textContent = String(value ?? "");
 }
 
+function setPanelInput(panel, fieldName, value)
+{
+    const input = panel.querySelector(`[data-ag-input='${fieldName}']`);
+    if (!(input instanceof HTMLInputElement)) return;
+    input.value = String(value ?? "");
+}
+
+async function applyCurrentHPFromPanel(actor, panel)
+{
+    if (!game.user?.isGM) return;
+    if (panel?.dataset?.mobTokensUpdatingCurrentHp === "1") return;
+
+    const hpInput = panel?.querySelector?.(".mob-tokens-current-hp-input");
+    if (!(hpInput instanceof HTMLInputElement)) return;
+
+    const flags = getGroupFlags(actor);
+    const existingCurrentHP = Math.max(Number(flags.currentGroupHP) || 0, 0);
+    const maxGroupHP = Math.max(Number(flags.maxGroupHP) || 0, 0);
+    const requestedHP = parseCurrentHPInput(hpInput.value, existingCurrentHP);
+    if (!Number.isFinite(requestedHP))
+    {
+        ui.notifications?.error(game.i18n.localize("MOBTOKENS.Errors.InvalidCurrentHP"));
+        refreshOpenGroupPanels(actor);
+        return;
+    }
+
+    const currentGroupHP = clampNumber(requestedHP, 0, maxGroupHP);
+    if (Number(flags.currentGroupHP) === currentGroupHP)
+    {
+        refreshOpenGroupPanels(actor);
+        return;
+    }
+
+    const hpPaths = getHitPointPaths(actor.system ?? {});
+    const updates = {};
+    if (hpPaths)
+    {
+        updates[hpPaths.current] = currentGroupHP;
+    }
+    else
+    {
+        updates[`flags.${FLAG_SCOPE}.currentGroupHP`] = currentGroupHP;
+    }
+
+    panel.dataset.mobTokensUpdatingCurrentHp = "1";
+    try
+    {
+        await actor.update(updates);
+    }
+    finally
+    {
+        panel.dataset.mobTokensUpdatingCurrentHp = "0";
+    }
+}
+
+function parseCurrentHPInput(rawValue, baseValue)
+{
+    const value = String(rawValue ?? "").trim();
+    if (!value) return Number.NaN;
+
+    const deltaMatch = value.match(/^([+-])\s*(\d+(?:\.\d+)?)$/);
+    if (deltaMatch)
+    {
+        const delta = Number(deltaMatch[2]);
+        if (!Number.isFinite(delta)) return Number.NaN;
+        return deltaMatch[1] === "-"
+            ? Number(baseValue) - delta
+            : Number(baseValue) + delta;
+    }
+
+    return Number(value);
+}
+
+function shouldDisplayMoraleUI()
+{
+    try
+    {
+        const enabledSetting = Boolean(game.settings.get(FLAG_SCOPE, "enableMoraleCheck"));
+        return getSystemAdapter().shouldShowMoraleUI(enabledSetting);
+    }
+    catch (_error)
+    {
+        return false;
+    }
+}
+
+async function createPartyProxyGroupActor(selectedTokens, {
+    groupName,
+    replaceSelectedTokens,
+    referenceToken
+} = {})
+{
+    const scene = canvas?.scene;
+    if (!scene)
+    {
+        ui.notifications?.warn(game.i18n.localize("MOBTOKENS.Errors.NoActiveScene"));
+        return null;
+    }
+
+    const tokenEntries = (selectedTokens ?? [])
+        .map((entry) =>
+        {
+            const tokenDocument = entry?.document ?? entry;
+            const actor = tokenDocument?.actor ?? entry?.actor ?? null;
+            if (!(actor instanceof Actor) || !tokenDocument?.id) return null;
+
+            return {
+                actor,
+                tokenDocument
+            };
+        })
+        .filter(Boolean);
+
+    if (tokenEntries.length < 2)
+    {
+        ui.notifications?.warn(game.i18n.localize("MOBTOKENS.Errors.InvalidTokenSelectionCount"));
+        return null;
+    }
+
+    const sourceActor = tokenEntries[0].actor;
+    const resolvedGroupName = String(groupName ?? "").trim()
+        || game.i18n.format("MOBTOKENS.DialogPartyGroupDefaultName", { count: tokenEntries.length });
+    const actorData = sourceActor.toObject();
+    delete actorData._id;
+    actorData.name = resolvedGroupName;
+    actorData.prototypeToken ??= {};
+    actorData.prototypeToken.name = resolvedGroupName;
+    actorData.prototypeToken.actorLink = true;
+
+    actorData.ownership = buildPartyProxyOwnership(tokenEntries.map((entry) => entry.actor));
+
+    actorData.flags ??= {};
+    actorData.flags[FLAG_SCOPE] = {
+        ...(actorData.flags[FLAG_SCOPE] ?? {}),
+        isGroupActor: true,
+        groupMode: GROUP_MODE_PARTY_PROXY,
+        sourceActorId: sourceActor.id,
+        sourceActorName: sourceActor.name,
+        creatureCount: tokenEntries.length,
+        remainingCount: tokenEntries.length,
+        hpPerCreature: 0,
+        maxGroupHP: 0,
+        currentGroupHP: 0,
+        moraleCheckedHalf: false,
+        moraleRollTotal: null,
+        moralePassed: null,
+        isRouting: false,
+        memberTokens: tokenEntries.map((entry) => ({
+            actorId: entry.actor.id,
+            actorName: entry.actor.name,
+            tokenId: String(entry.tokenDocument.id ?? ""),
+            sceneId: String(scene.id ?? "")
+        }))
+    };
+
+    const createdActor = await Actor.create(actorData, { renderSheet: false });
+
+    const anchorToken = referenceToken?.document
+        ?? tokenEntries[0].tokenDocument
+        ?? null;
+    const anchorX = Number(anchorToken?.x) || 0;
+    const anchorY = Number(anchorToken?.y) || 0;
+
+    const proxyTokenDoc = await createdActor.getTokenDocument({
+        x: anchorX,
+        y: anchorY
+    });
+    const [createdToken] = await scene.createEmbeddedDocuments("Token", [proxyTokenDoc.toObject()]);
+
+    if (replaceSelectedTokens)
+    {
+        const deleteIds = tokenEntries
+            .map((entry) => entry.tokenDocument.id)
+            .filter(Boolean);
+        if (deleteIds.length > 0)
+        {
+            await scene.deleteEmbeddedDocuments("Token", deleteIds);
+        }
+    }
+
+    ui.notifications?.info(game.i18n.format("MOBTOKENS.Notifications.PartyGroupCreated", {
+        name: createdActor.name,
+        count: tokenEntries.length
+    }));
+
+    return {
+        actor: createdActor,
+        token: createdToken ?? null
+    };
+}
+
+async function splitPartyProxyGroupActor(groupActor, referenceToken)
+{
+    const scene = canvas?.scene;
+    if (!scene)
+    {
+        ui.notifications?.warn(game.i18n.localize("MOBTOKENS.Errors.NoActiveScene"));
+        return;
+    }
+
+    const flags = getGroupFlags(groupActor);
+    const members = Array.isArray(flags.memberTokens) ? flags.memberTokens : [];
+    if (members.length < 1)
+    {
+        ui.notifications?.warn(game.i18n.localize("MOBTOKENS.Errors.PartyGroupMembersMissing"));
+        return;
+    }
+
+    const anchorDocument = referenceToken?.document
+        ?? groupActor.getActiveTokens?.()[0]?.document
+        ?? null;
+    if (!anchorDocument)
+    {
+        ui.notifications?.warn(game.i18n.localize("MOBTOKENS.Errors.TokenNotFound"));
+        return;
+    }
+
+    const gridSize = Number(canvas?.grid?.size) || 100;
+    const baseX = Number(anchorDocument.x) || 0;
+    const baseY = Number(anchorDocument.y) || 0;
+    const tokenData = [];
+    let missingCount = 0;
+
+    for (let index = 0; index < members.length; index++)
+    {
+        const member = members[index] ?? {};
+        const memberActor = game.actors?.get(String(member.actorId ?? ""));
+        if (!(memberActor instanceof Actor))
+        {
+            missingCount += 1;
+            continue;
+        }
+
+        const tokenDoc = await memberActor.getTokenDocument({
+            x: baseX + (gridSize * index),
+            y: baseY
+        });
+        tokenData.push(tokenDoc.toObject());
+    }
+
+    if (tokenData.length < 1)
+    {
+        ui.notifications?.warn(game.i18n.localize("MOBTOKENS.Errors.PartyGroupMembersMissing"));
+        return;
+    }
+
+    await scene.createEmbeddedDocuments("Token", tokenData);
+
+    if (anchorDocument.id)
+    {
+        await scene.deleteEmbeddedDocuments("Token", [anchorDocument.id]);
+    }
+    await groupActor.delete();
+
+    if (missingCount > 0)
+    {
+        ui.notifications?.warn(game.i18n.format("MOBTOKENS.Errors.PartyGroupMembersPartialMissing", {
+            count: missingCount
+        }));
+    }
+
+    ui.notifications?.info(game.i18n.format("MOBTOKENS.Notifications.PartyGroupSplit", {
+        count: tokenData.length
+    }));
+}
+
+function buildPartyProxyOwnership(actors)
+{
+    const ownership = { default: 0 };
+    for (const actor of actors)
+    {
+        const actorOwnership = actor?.ownership ?? {};
+        for (const [userId, level] of Object.entries(actorOwnership))
+        {
+            const numericLevel = Number(level);
+            if (!Number.isFinite(numericLevel)) continue;
+
+            const current = Number(ownership[userId] ?? Number.NEGATIVE_INFINITY);
+            if (!Number.isFinite(current) || numericLevel > current)
+            {
+                ownership[userId] = numericLevel;
+            }
+        }
+    }
+
+    return ownership;
+}
+
 export async function createGroupActor(sourceActor, {
     groupName,
     folderId,
     creatureCount,
     hpPerCreature,
     initialCurrentHP,
+    moralePath,
+    moraleValue,
+    armorClassPath,
+    armorClassValue,
     sourceActorId,
     sourceActorName,
     renderSheet = true,
@@ -714,6 +1242,7 @@ export async function createGroupActor(sourceActor, {
     actorData.flags[FLAG_SCOPE] = {
         ...(actorData.flags[FLAG_SCOPE] ?? {}),
         isGroupActor: true,
+        groupMode: GROUP_MODE_MOB,
         sourceActorId: effectiveSourceActorId,
         sourceActorName: effectiveSourceActorName,
         creatureCount,
@@ -728,8 +1257,11 @@ export async function createGroupActor(sourceActor, {
     };
 
     applyHPUpdate(actorData, hpPaths, currentGroupHP, maxGroupHP);
+    applyOptionalActorNumericOverride(actorData, moralePath, moraleValue);
+    applyOptionalActorNumericOverride(actorData, armorClassPath, armorClassValue);
 
     const createdActor = await Actor.create(actorData, { renderSheet });
+
     if (notify)
     {
         ui.notifications?.info(game.i18n.format("MOBTOKENS.Notifications.GroupCreated", {
@@ -737,6 +1269,76 @@ export async function createGroupActor(sourceActor, {
         }));
     }
     return createdActor;
+}
+
+function getCreateDialogStatConfig(actor)
+{
+    const adapter = getSystemAdapter();
+    const moralePath = resolveFirstNumericPath(actor, adapter.moralePathCandidates);
+    const armorClassPath = resolveFirstNumericPath(actor, adapter.acPathCandidates);
+
+    return {
+        showMoraleField: Boolean(moralePath),
+        moralePath,
+        defaultMorale: resolveNumericValue(actor, moralePath, adapter.defaultMoraleValue ?? 50),
+        showArmorClassField: Boolean(armorClassPath),
+        armorClassPath,
+        defaultArmorClass: resolveNumericValue(actor, armorClassPath, adapter.defaultArmorClassValue ?? 10)
+    };
+}
+
+function resolveFirstNumericPath(actor, candidatePaths)
+{
+    if (!actor || !Array.isArray(candidatePaths)) return null;
+
+    for (const path of candidatePaths)
+    {
+        const value = foundry.utils.getProperty(actor, path);
+        if (Number.isFinite(parseNumericLike(value))) return path;
+    }
+
+    return null;
+}
+
+function resolveNumericValue(actor, path, fallback)
+{
+    if (path)
+    {
+        const value = parseNumericLike(foundry.utils.getProperty(actor, path));
+        if (Number.isFinite(value)) return value;
+    }
+
+    return parseNumericLike(fallback);
+}
+
+function parseOptionalNumericInput(value)
+{
+    if (value === null || value === undefined) return null;
+    const trimmed = String(value).trim();
+    if (!trimmed) return null;
+
+    const parsed = Number(trimmed);
+    return Number.isFinite(parsed) ? parsed : null;
+}
+
+function applyOptionalActorNumericOverride(target, path, value)
+{
+    if (!path) return;
+    if (!Number.isFinite(Number(value))) return;
+    foundry.utils.setProperty(target, path, Number(value));
+}
+
+function parseNumericLike(value)
+{
+    const direct = Number(value);
+    if (Number.isFinite(direct)) return direct;
+
+    const raw = String(value ?? "").trim();
+    const match = raw.match(/-?\d+(?:\.\d+)?/);
+    if (!match) return Number.NaN;
+
+    const parsed = Number(match[0]);
+    return Number.isFinite(parsed) ? parsed : Number.NaN;
 }
 
 function getActorFolderOptions(defaultFolderId = "")

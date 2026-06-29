@@ -1,6 +1,6 @@
 import { BADGE_KEY } from "../core/constants.js";
 import { clampNumber } from "../core/helpers.js";
-import { getGroupFlags, isGroupActor } from "./group-model.js";
+import { getGroupFlags, isGroupActor, isMobGroupActor } from "./group-model.js";
 
 export function renderTokenCountBadge(token)
 {
@@ -15,7 +15,12 @@ export function renderTokenCountBadge(token)
 
     const flags = getGroupFlags(actor);
     const remainingCount = Math.max(Number(flags.remainingCount) || 0, 0);
-    const isRouting = Boolean(flags.isRouting);
+    const currentGroupHP = Math.max(Number(flags.currentGroupHP) || 0, 0);
+    const maxGroupHP = Math.max(Number(flags.maxGroupHP) || 0, 0);
+    const isBelowHalfHP = isMobGroupActor(actor)
+        && maxGroupHP > 0
+        && currentGroupHP > 0
+        && currentGroupHP <= (maxGroupHP * 0.5);
 
     let badge = token[BADGE_KEY];
     if (!badge)
@@ -42,7 +47,7 @@ export function renderTokenCountBadge(token)
 
     background.clear();
     background.lineStyle(metrics.borderWidth, 0xFFFFFF, 0.95);
-    background.beginFill(isRouting ? 0x8F1D1D : 0x111827, 0.82);
+    background.beginFill(isBelowHalfHP ? 0x8F1D1D : 0x111827, 0.82);
     background.drawRoundedRect(0, 0, boxWidth, boxHeight, metrics.radius);
     background.endFill();
 

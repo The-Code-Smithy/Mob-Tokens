@@ -1,5 +1,6 @@
-import { FLAG_SCOPE, HP_PATH_CANDIDATES, MORALE_PATH_CANDIDATES } from "../core/constants.js";
+import { FLAG_SCOPE, GROUP_MODE_MOB, GROUP_MODE_PARTY_PROXY, HP_PATH_CANDIDATES, MORALE_PATH_CANDIDATES } from "../core/constants.js";
 import { clampNumber } from "../core/helpers.js";
+import { getSystemAdapter } from "../systems/system-adapter.js";
 
 export function getActorFromDirectoryLi(li)
 {
@@ -46,6 +47,23 @@ export function getGroupFlags(actor)
 export function isGroupActor(actor)
 {
     return Boolean(getGroupFlags(actor).isGroupActor);
+}
+
+export function getGroupMode(actor)
+{
+    const mode = String(getGroupFlags(actor).groupMode ?? "").trim();
+    if (mode === GROUP_MODE_PARTY_PROXY) return GROUP_MODE_PARTY_PROXY;
+    return GROUP_MODE_MOB;
+}
+
+export function isPartyProxyGroupActor(actor)
+{
+    return isGroupActor(actor) && getGroupMode(actor) === GROUP_MODE_PARTY_PROXY;
+}
+
+export function isMobGroupActor(actor)
+{
+    return isGroupActor(actor) && getGroupMode(actor) === GROUP_MODE_MOB;
 }
 
 export function formatGroupName(sourceActorName, remainingCount)
@@ -148,7 +166,12 @@ export function getDefaultHPPerCreature(actor)
 
 export function getMoraleTarget(actor)
 {
-    for (const path of MORALE_PATH_CANDIDATES)
+    const adapterPaths = getSystemAdapter().moralePathCandidates;
+    const moralePaths = Array.isArray(adapterPaths) && adapterPaths.length > 0
+        ? adapterPaths
+        : MORALE_PATH_CANDIDATES;
+
+    for (const path of moralePaths)
     {
         const value = foundry.utils.getProperty(actor, path);
         const numericValue = Number(value);

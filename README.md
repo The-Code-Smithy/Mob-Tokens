@@ -1,6 +1,6 @@
 # Mob Tokens
 
-Version: 0.4.0
+Version: 0.5.0
 
 Mob Tokens is a Foundry VTT v14 module that lets a GM represent multiple identical creatures as a single token on the canvas. It is aimed at large encounter management where token count, combat overhead, and scene clutter would otherwise slow play down.
 
@@ -56,6 +56,14 @@ Tracked values:
 
 ## Recent Version Updates
 
+### v0.5.0
+
+- Group sheets now support GM Current HP edits with direct values or signed adjustments (example: `22`, `+9`, `-9`).
+- Current HP sheet input now auto-selects on focus and applies updates on Enter or blur.
+- Defeat sync now preserves/restores prior non-defeated overlays instead of clearing unrelated overlay state.
+- Token badge layering/placement now avoids obscuring stacked token effect icons.
+- Morale defaults are now system-aware (new dnd5e worlds default morale checks off), and morale UI visibility follows the morale setting.
+
 ### v0.4.0
 
 - Create-from-selection now supports creating multiple group actors in one step using explicit counts (example: `10, 10, 3`).
@@ -76,7 +84,7 @@ Tracked values:
 - Added pooled HP tracking and automatic surviving-member recalculation.
 - Added morale workflow, token count badge, and actor-sheet group panel.
 
-## v0.4.0 Scope
+## v0.5.0 Scope
 
 Included in this version:
 
@@ -88,8 +96,9 @@ Included in this version:
 - Remaining member calculation
 - Token and actor name updates
 - Basic defeat handling in combat
-- Morale check and reset flow
+- Morale check and reset flow (setting-controlled visibility)
 - Mob information panel on the actor sheet
+- GM Current HP editing from the group sheet (absolute and relative)
 
 Not included in this version:
 
@@ -108,6 +117,7 @@ Not included in this version:
 - The module updates the actor name to match the current remaining count so the combat tracker and linked tokens stay aligned.
 - Defeated state sync now mirrors the defeated overlay outside combat while preserving any prior non-defeated overlay for restoration.
 - Group count badge placement/layering is tuned to avoid obscuring stacked token status effect icons.
+- Morale UI visibility now follows the world morale setting, and new dnd5e worlds default morale checks off.
 - HP field detection is intentionally generic, but systems with unusual actor HP schemas may need a follow-up compatibility pass.
 
 ## Playwright UI Tests
