@@ -2,7 +2,6 @@
 
 ## Near Term
 
-- Add a safer token defeat sync that also mirrors the defeated overlay outside combat.
 - Add actor sheet controls for editing group size and recalculating pooled HP.
 - Add a module setting for count badge location (upper-left, upper-right, or hidden).
 - Add compatibility checks and explicit HP adapters for supported systems.

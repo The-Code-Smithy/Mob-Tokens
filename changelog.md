@@ -1,5 +1,10 @@
 # Mob Tokens — Changelog
 
+## Unreleased
+
+- Fixed defeat sync to preserve non-defeated token overlays when applying and clearing the defeated icon.
+- Fixed token badge layering/placement so stacked token status effect icons remain visible.
+
 ## 0.4.0
 
 - Added create-from-selection multi-group support so one action can create multiple group actors from selected tokens using explicit counts (example: `10, 10, 3`).

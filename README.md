@@ -106,6 +106,8 @@ Not included in this version:
 
 - For best results, place linked tokens from the generated Mob Token actor.
 - The module updates the actor name to match the current remaining count so the combat tracker and linked tokens stay aligned.
+- Defeated state sync now mirrors the defeated overlay outside combat while preserving any prior non-defeated overlay for restoration.
+- Group count badge placement/layering is tuned to avoid obscuring stacked token status effect icons.
 - HP field detection is intentionally generic, but systems with unusual actor HP schemas may need a follow-up compatibility pass.
 
 ## Playwright UI Tests
