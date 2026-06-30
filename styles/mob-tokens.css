@@ -159,6 +159,116 @@
     white-space: nowrap;
 }
 
+.mob-tokens-party-members {
+    display: grid;
+    gap: 0.35rem;
+    margin-top: 0.75rem;
+    border: 1px dashed transparent;
+    border-radius: 6px;
+    padding: 0.2rem;
+    transition: border-color 120ms ease, background-color 120ms ease;
+}
+
+.mob-tokens-party-members.is-drop-target {
+    border-color: var(--color-border-highlight, #8aa3ff);
+    background: color-mix(in srgb, var(--color-bg-btn-minor, #2f3544) 25%, transparent);
+}
+
+.mob-tokens-party-member-row {
+    display: grid;
+    grid-template-columns: 2rem minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.35rem 0.45rem;
+    border: 1px solid var(--color-border-light-tertiary, rgba(255, 255, 255, 0.2));
+    border-radius: 6px;
+}
+
+.mob-tokens-party-member-portrait {
+    width: 2rem;
+    height: 2rem;
+    border-radius: 4px;
+    object-fit: cover;
+    border: 1px solid rgba(255, 255, 255, 0.2);
+}
+
+.mob-tokens-party-member-main {
+    min-width: 0;
+}
+
+.mob-tokens-party-member-name {
+    font-weight: 700;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.mob-tokens-party-member-hpbar {
+    width: 100%;
+    height: 0.42rem;
+    margin: 0.18rem 0 0.18rem;
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.14);
+    overflow: hidden;
+}
+
+.mob-tokens-party-member-hpfill {
+    height: 100%;
+    border-radius: 999px;
+    background: linear-gradient(90deg, #84d35d 0%, #4fbf71 100%);
+    transition: width 160ms ease;
+}
+
+.mob-tokens-party-member-meta {
+    font-size: 0.75rem;
+    opacity: 0.82;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.mob-tokens-panel .mob-tokens-party-member-remove {
+    width: auto;
+    min-height: 1.6rem;
+    padding: 0.2rem 0.45rem;
+    font-size: 0.75rem;
+    flex: 0 0 auto;
+}
+
+.mob-tokens-party-member-empty {
+    opacity: 0.8;
+    font-style: italic;
+    font-size: 0.85rem;
+}
+
+.mob-tokens-party-dropzone {
+    border: 1px dashed var(--color-border-light-tertiary, rgba(255, 255, 255, 0.2));
+    border-radius: 6px;
+    padding: 0.45rem 0.5rem;
+    margin-bottom: 0.65rem;
+    transition: border-color 120ms ease, background-color 120ms ease;
+}
+
+.mob-tokens-party-dropzone.is-drop-target {
+    border-color: var(--color-border-highlight, #8aa3ff);
+    background: color-mix(in srgb, var(--color-bg-btn-minor, #2f3544) 40%, transparent);
+}
+
+.mob-tokens-party-drop-hint {
+    margin-top: 0.35rem;
+    font-size: 0.75rem;
+    opacity: 0.8;
+}
+
+.mob-tokens-party-sheet-layout .mob-tokens-panel.mob-tokens-party-panel {
+    margin: 0;
+    padding: 0.5rem;
+}
+
+.mob-tokens-party-sheet-layout .mob-tokens-party-members {
+    margin-top: 0.5rem;
+}
+
 #token-hud .control-icon.mob-tokens-create-group,
 #token-hud .control-icon.mob-tokens-split-group {
     color: var(--color-text-light-highlight);

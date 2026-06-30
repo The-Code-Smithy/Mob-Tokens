@@ -2,6 +2,19 @@
 
 ## Unreleased
 
+## 0.7.0
+
+- Added Actor Directory folder context action to create Party Groups from folder members with automatic preselection.
+- Added Player Character and Non-player Character filters to the Party Group actor picker.
+- Added click-to-place Party Proxy token flow (including ghost preview) when creating from directory/folder without a reference token.
+- Improved Party Proxy split placement and teardown behavior to reduce system-specific console noise and missing-id delete races.
+- Updated Foundry API usage for namespaced `Ray` and `loadTexture` access.
+- Migrated dialog usage to DialogV2-only paths to avoid legacy V1 framework warnings.
+- Added dedicated Party Proxy sheet layout with member add/remove management and drag-and-drop member add zones.
+- Added Party Proxy member HP bars for improved at-a-glance health tracking.
+- Improved party panel event handling to prevent actor sheet openings from party member list interactions.
+- Updated TextEditor drag-data usage to namespaced `foundry.applications.ux.TextEditor.implementation`.
+
 ## 0.6.0
 
 - Added system adapter scaffolding (`generic`, `dnd5e`, `osric`) to centralize system-specific behavior.

@@ -7,6 +7,7 @@
 - Add a module setting for count badge location (upper-left, upper-right, or hidden).
 - Expand system adapters with explicit HP/AC/morale path coverage and compatibility checks for supported systems.
 - Add a confirmation flow for creating multiple groups from the same source actor.
+- Refactor `scripts/ui/group-ui.js` into smaller domain files (dialogs, sheet panels, token HUD actions, party management) to reduce maintenance risk.
 
 ### Movement-Only Party Group (V1)
 

@@ -2,6 +2,42 @@ import { FLAG_SCOPE, GROUP_MODE_PARTY_PROXY } from "../core/constants.js";
 import { createWallAwareTokenDataForActors } from "../core/token-placement.js";
 import { getGroupFlags, isGroupActor } from "./group-model.js";
 
+export function getPartyProxyMemberActors(groupActor)
+{
+    const flags = getGroupFlags(groupActor);
+    const memberTokens = Array.isArray(flags.memberTokens) ? flags.memberTokens : [];
+    return memberTokens
+        .map((member) => game.actors?.get(String(member?.actorId ?? "")))
+        .filter((actor) => actor instanceof Actor);
+}
+
+export async function setPartyProxyMemberActors(groupActor, memberActors)
+{
+    const resolvedMembers = (memberActors ?? [])
+        .filter((actor) => actor instanceof Actor && !isGroupActor(actor));
+    if (resolvedMembers.length < 1)
+    {
+        ui.notifications?.warn(game.i18n.localize("MOBTOKENS.Errors.InvalidPartyActorSelectionCount"));
+        return false;
+    }
+
+    const sceneId = String(canvas?.scene?.id ?? "");
+    const updates = {
+        ownership: buildPartyProxyOwnership(resolvedMembers),
+        [`flags.${FLAG_SCOPE}.memberTokens`]: resolvedMembers.map((actor) => ({
+            actorId: actor.id,
+            actorName: actor.name,
+            tokenId: "",
+            sceneId
+        })),
+        [`flags.${FLAG_SCOPE}.creatureCount`]: resolvedMembers.length,
+        [`flags.${FLAG_SCOPE}.remainingCount`]: resolvedMembers.length
+    };
+
+    await groupActor.update(updates);
+    return true;
+}
+
 export async function createPartyProxyGroupActor(selectedTokens, {
     groupName,
     replaceSelectedTokens,

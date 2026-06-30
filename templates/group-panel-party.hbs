@@ -1,0 +1,45 @@
+<section class="mob-tokens-panel mob-tokens-party-panel">
+    <div class="mob-tokens-party-dropzone" data-ag-section="party-dropzone">
+        <h3>{{localize "MOBTOKENS.PanelPartyTitle"}}</h3>
+        <div class="mob-tokens-grid">
+            <div><strong>{{localize "MOBTOKENS.PanelOriginalCount"}}</strong><span
+                    data-ag-field="creatureCount">{{creatureCount}}</span></div>
+            <div><strong>{{localize "MOBTOKENS.PanelRemainingCount"}}</strong><span
+                    data-ag-field="remainingCount">{{remainingCount}}</span></div>
+        </div>
+        {{#if isGM}}
+        <div class="mob-tokens-party-drop-hint">{{localize "MOBTOKENS.PanelPartyDropHint"}}</div>
+        {{/if}}
+    </div>
+
+    <div class="mob-tokens-party-members" data-ag-section="party-members">
+        {{#if hasMembers}}
+        {{#each members}}
+        <div class="mob-tokens-party-member-row" data-ag-party-member-row="{{actorId}}">
+            <img class="mob-tokens-party-member-portrait" src="{{img}}" alt="{{name}}" />
+            <div class="mob-tokens-party-member-main">
+                <div class="mob-tokens-party-member-name">{{name}}</div>
+                <div class="mob-tokens-party-member-hpbar" aria-label="HP {{hpCurrent}}/{{hpMax}}">
+                    <div class="mob-tokens-party-member-hpfill" style="width: {{hpPercent}}%;"></div>
+                </div>
+                <div class="mob-tokens-party-member-meta">HP {{hpCurrent}}/{{hpMax}} | AC {{ac}} | {{conditions}}</div>
+            </div>
+            {{#if @root.isGM}}
+            <button type="button" class="mob-tokens-party-member-remove mob-tokens-button"
+                data-ag-action="remove-party-member" data-ag-actor-id="{{actorId}}">{{localize
+                "MOBTOKENS.ButtonRemove"}}</button>
+            {{/if}}
+        </div>
+        {{/each}}
+        {{else}}
+        <div class="mob-tokens-party-member-empty">{{localize "MOBTOKENS.PanelPartyNoMembers"}}</div>
+        {{/if}}
+    </div>
+
+    {{#if isGM}}
+    <div class="mob-tokens-actions">
+        <button type="button" class="mob-tokens-button" data-ag-action="add-party-members">{{localize
+            "MOBTOKENS.ButtonAddMembers"}}</button>
+    </div>
+    {{/if}}
+</section>

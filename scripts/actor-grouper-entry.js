@@ -105,15 +105,18 @@ Hooks.on("getFolderContextOptions", (app, entryOptions) =>
 Hooks.on("updateActor", async (actor, _changed, options) =>
 {
     if (options?.[UPDATE_GUARD]) return;
-    if (!isMobGroupActor(actor)) return;
-    await syncGroupActor(actor);
+    if (!isGroupActor(actor)) return;
+    if (isMobGroupActor(actor))
+    {
+        await syncGroupActor(actor);
+    }
     refreshOpenGroupPanels(actor);
 });
 
 Hooks.on("renderActorSheetV2", async (app, element) =>
 {
     const actor = app.actor ?? app.document;
-    if (!(actor instanceof Actor) || !isMobGroupActor(actor)) return;
+    if (!(actor instanceof Actor) || !isGroupActor(actor)) return;
     await injectGroupPanel(actor, element);
     wireGroupPanelActions(actor, element);
 });
