@@ -1,5 +1,6 @@
 import { FLAG_SCOPE, GROUP_MODE_MOB } from "../core/constants.js";
 import { clampNumber, getInputValue, getRootElement } from "../core/helpers.js";
+import { createWallAwareTokenDataForActors } from "../core/token-placement.js";
 import { applyHPUpdate, calculateRemainingCount, formatGroupName, getDefaultHPPerCreature, getGroupFlags, getHitPointPaths, isGroupActor, isPartyProxyGroupActor } from "../actors/group-model.js";
 import { formatMoraleStatus, resetMoraleFlags } from "../actors/morale.js";
 import { createPartyProxyGroupActor, createPartyProxyGroupFromActors, splitPartyProxyGroupActor } from "../actors/pc-group.js";
@@ -31,6 +32,72 @@ function isCheckboxChecked(html, name)
     return Boolean(root?.querySelector?.(`[name='${name}']`)?.checked);
 }
 
+function getNamedInput(root, name)
+{
+    return root?.querySelector?.(`[name='${name}']`) ?? null;
+}
+
+function getDialogContentRoot(dialogLike)
+{
+    const host = dialogLike?.element ?? dialogLike;
+    const root = getRootElement(host);
+    if (!root) return null;
+    return root.querySelector("form") ?? root;
+}
+
+function openDialogCompat(config)
+{
+    const DialogV2 = foundry?.applications?.api?.DialogV2;
+    if (!DialogV2)
+    {
+        throw new Error("Mob Tokens requires foundry.applications.api.DialogV2 for dialog rendering.");
+    }
+
+    const buttons = Object.entries(config?.buttons ?? {}).map(([action, buttonConfig]) => ({
+        action,
+        label: buttonConfig?.label,
+        icon: buttonConfig?.icon,
+        default: action === config?.default,
+        callback: async (event, button, dialog) =>
+        {
+            if (typeof buttonConfig?.callback !== "function") return;
+            const root = getDialogContentRoot(dialog);
+            await buttonConfig.callback(root ?? dialog, event, button, dialog);
+        }
+    }));
+
+    const dialog = new DialogV2({
+        window: {
+            title: config?.title ?? ""
+        },
+        content: config?.content ?? "",
+        buttons,
+        close: config?.close
+    });
+
+    if (typeof config?.render === "function")
+    {
+        const hookId = Hooks.on("renderDialogV2", (app) =>
+        {
+            if (app !== dialog) return;
+            Hooks.off("renderDialogV2", hookId);
+            const root = getDialogContentRoot(dialog);
+            config.render(root ?? dialog);
+        });
+    }
+
+    dialog.render(true);
+    return dialog;
+}
+
+function isLikelyPlayerCharacter(actor)
+{
+    const actorType = String(actor?.type ?? "").trim().toLowerCase();
+    if (actorType === "character" || actorType === "pc" || actorType === "player") return true;
+    if (actorType === "npc" || actorType === "monster") return false;
+    return Boolean(actor?.hasPlayerOwner);
+}
+
 export async function openCreateGroupDialog(actor)
 {
     const defaultHP = getDefaultHPPerCreature(actor);
@@ -49,7 +116,7 @@ export async function openCreateGroupDialog(actor)
         defaultArmorClass: createStats.defaultArmorClass
     });
 
-    return new Dialog({
+    return openDialogCompat({
         title: game.i18n.localize("MOBTOKENS.ContextCreateGroup"),
         content,
         buttons: {
@@ -89,25 +156,27 @@ export async function openCreateGroupDialog(actor)
         default: "create",
         render: (html) =>
         {
-            const nameInput = html.find("[name='groupName']");
-            const countInput = html.find("[name='creatureCount']");
+            const root = getDialogContentRoot(html);
+            const nameInput = getNamedInput(root, "groupName");
+            const countInput = getNamedInput(root, "creatureCount");
+            if (!(nameInput instanceof HTMLInputElement) || !(countInput instanceof HTMLInputElement)) return;
             let nameDirty = false;
 
-            nameInput.on("input", () =>
+            nameInput.addEventListener("input", () =>
             {
                 nameDirty = true;
             });
 
-            countInput.on("change", () =>
+            countInput.addEventListener("change", () =>
             {
                 if (nameDirty) return;
-                const count = Math.max(Number(countInput.val()) || 1, 1);
-                nameInput.val(formatGroupName(actor.name, count));
+                const count = Math.max(Number(countInput.value) || 1, 1);
+                nameInput.value = formatGroupName(actor.name, count);
             });
 
-            countInput.trigger("focus");
+            countInput.focus();
         }
-    }).render(true);
+    });
 }
 
 export async function openCreatePartyGroupFromActorsDialog(seedActor = null)
@@ -128,9 +197,11 @@ export async function openCreatePartyGroupFromActorsDialog(seedActor = null)
         const actorName = String(actor.name ?? "-");
         const escapedName = foundry.utils.escapeHTML(actorName);
         const escapedType = foundry.utils.escapeHTML(String(actor.type ?? ""));
+        const isPlayerCharacter = isLikelyPlayerCharacter(actor);
+        const isNonPlayerCharacter = !isPlayerCharacter;
         const checked = seedActor?.id === actor.id ? " checked" : "";
         return `
-            <label class="mob-tokens-party-actor-option" data-ag="party-actor-option" data-actor-name="${foundry.utils.escapeHTML(actorName.toLowerCase())}" data-actor-type="${escapedType.toLowerCase()}">
+            <label class="mob-tokens-party-actor-option" data-ag="party-actor-option" data-actor-name="${foundry.utils.escapeHTML(actorName.toLowerCase())}" data-actor-type="${escapedType.toLowerCase()}" data-actor-is-pc="${isPlayerCharacter ? "1" : "0"}" data-actor-is-npc="${isNonPlayerCharacter ? "1" : "0"}">
                 <input type="checkbox" name="memberActorIds" value="${actor.id}"${checked}>
                 <span class="mob-tokens-party-actor-name">${escapedName}</span>
                 <small class="mob-tokens-party-actor-type">(${escapedType || "actor"})</small>
@@ -152,6 +223,16 @@ export async function openCreatePartyGroupFromActorsDialog(seedActor = null)
                 <label>${game.i18n.localize("MOBTOKENS.DialogPartyActorSearch")}</label>
                 <input data-ag="party-actor-filter" type="text" autocomplete="off" placeholder="${foundry.utils.escapeHTML(game.i18n.localize("MOBTOKENS.DialogPartyActorSearchPlaceholder"))}">
             </div>
+            <div class="form-group mob-tokens-checkbox-group mob-tokens-party-filter-options">
+                <label>
+                    <input data-ag="party-filter-pc" type="checkbox" name="showOnlyPlayerCharacters">
+                    ${game.i18n.localize("MOBTOKENS.DialogPartyFilterOnlyPlayerCharacters")}
+                </label>
+                <label>
+                    <input data-ag="party-filter-npc" type="checkbox" name="showOnlyNonPlayerCharacters">
+                    ${game.i18n.localize("MOBTOKENS.DialogPartyFilterOnlyNonPlayerCharacters")}
+                </label>
+            </div>
             <div class="form-group mob-tokens-checkbox-group">
                 <label>
                     <input data-ag="create-party-place-token" type="checkbox" name="placeTokenOnScene">
@@ -164,7 +245,7 @@ export async function openCreatePartyGroupFromActorsDialog(seedActor = null)
         </form>
     `;
 
-    return new Dialog({
+    return openDialogCompat({
         title: game.i18n.localize("MOBTOKENS.ContextCreatePartyGroup"),
         content,
         buttons: {
@@ -206,25 +287,43 @@ export async function openCreatePartyGroupFromActorsDialog(seedActor = null)
         {
             const root = html instanceof HTMLElement ? html : html?.[0];
             const searchInput = root?.querySelector?.("[data-ag='party-actor-filter']");
+            const playerCharacterFilter = root?.querySelector?.("[data-ag='party-filter-pc']");
+            const nonPlayerCharacterFilter = root?.querySelector?.("[data-ag='party-filter-npc']");
             if (!(searchInput instanceof HTMLInputElement)) return;
+            if (!(playerCharacterFilter instanceof HTMLInputElement)) return;
+            if (!(nonPlayerCharacterFilter instanceof HTMLInputElement)) return;
 
             const applyFilter = () =>
             {
                 const query = String(searchInput.value ?? "").trim().toLowerCase();
+                const showOnlyPlayerCharacters = playerCharacterFilter.checked;
+                const showOnlyNonPlayerCharacters = nonPlayerCharacterFilter.checked;
                 const rows = Array.from(root.querySelectorAll("[data-ag='party-actor-option']"));
                 for (const row of rows)
                 {
                     const name = String(row.getAttribute("data-actor-name") ?? "");
                     const type = String(row.getAttribute("data-actor-type") ?? "");
-                    const isMatch = !query || name.includes(query) || type.includes(query);
-                    row.style.display = isMatch ? "" : "none";
+                    const isPlayerCharacter = row.getAttribute("data-actor-is-pc") === "1";
+                    const isNonPlayerCharacter = row.getAttribute("data-actor-is-npc") === "1";
+                    const matchesQuery = !query || name.includes(query) || type.includes(query);
+
+                    let matchesTypeFilter = true;
+                    if (showOnlyPlayerCharacters || showOnlyNonPlayerCharacters)
+                    {
+                        matchesTypeFilter = (showOnlyPlayerCharacters && isPlayerCharacter)
+                            || (showOnlyNonPlayerCharacters && isNonPlayerCharacter);
+                    }
+
+                    row.style.display = (matchesQuery && matchesTypeFilter) ? "" : "none";
                 }
             };
 
             searchInput.addEventListener("input", applyFilter);
+            playerCharacterFilter.addEventListener("change", applyFilter);
+            nonPlayerCharacterFilter.addEventListener("change", applyFilter);
             applyFilter();
         }
-    }).render(true);
+    });
 }
 
 export function injectTokenHudGroupAction(token, html)
@@ -403,7 +502,7 @@ async function openCreateGroupFromTokensDialog(selectedTokens, sourceActor, refe
         defaultArmorClass: createStats.defaultArmorClass
     });
 
-    return new Dialog({
+    return openDialogCompat({
         title: game.i18n.localize("MOBTOKENS.HudCreateGroupFromSelection"),
         content,
         buttons: {
@@ -501,51 +600,56 @@ async function openCreateGroupFromTokensDialog(selectedTokens, sourceActor, refe
         default: "create",
         render: (html) =>
         {
-            const nameInput = html.find("[name='groupName']");
-            const countInput = html.find("[name='creatureCount']");
-            const resultGroupCountInput = html.find("[name='resultGroupCount']");
-            const groupCountsInput = html.find("[name='groupCounts']");
+            const root = getDialogContentRoot(html);
+            const nameInput = getNamedInput(root, "groupName");
+            const countInput = getNamedInput(root, "creatureCount");
+            const resultGroupCountInput = getNamedInput(root, "resultGroupCount");
+            const groupCountsInput = getNamedInput(root, "groupCounts");
+            if (!(nameInput instanceof HTMLInputElement)
+                || !(countInput instanceof HTMLInputElement)
+                || !(resultGroupCountInput instanceof HTMLInputElement)
+                || !(groupCountsInput instanceof HTMLInputElement)) return;
             let nameDirty = false;
 
-            nameInput.on("input", () =>
+            nameInput.addEventListener("input", () =>
             {
                 nameDirty = true;
             });
 
             const refreshGroupCounts = () =>
             {
-                const total = Math.max(Number(countInput.val()) || 1, 1);
-                const requestedGroups = Math.max(Number(resultGroupCountInput.val()) || 1, 1);
+                const total = Math.max(Number(countInput.value) || 1, 1);
+                const requestedGroups = Math.max(Number(resultGroupCountInput.value) || 1, 1);
                 const normalizedGroups = clampNumber(Math.round(requestedGroups), 1, total);
-                resultGroupCountInput.val(normalizedGroups);
+                resultGroupCountInput.value = String(normalizedGroups);
                 if (normalizedGroups <= 1)
                 {
-                    groupCountsInput.val(String(total));
+                    groupCountsInput.value = String(total);
                     return;
                 }
 
-                groupCountsInput.val(suggestSplitCounts(total, normalizedGroups));
+                groupCountsInput.value = suggestSplitCounts(total, normalizedGroups);
             };
 
-            countInput.on("change", () =>
+            countInput.addEventListener("change", () =>
             {
-                const count = Math.max(Number(countInput.val()) || 1, 1);
+                const count = Math.max(Number(countInput.value) || 1, 1);
                 if (!nameDirty)
                 {
-                    nameInput.val(formatGroupName(sourceActor.name, count));
+                    nameInput.value = formatGroupName(sourceActor.name, count);
                 }
                 refreshGroupCounts();
             });
 
-            resultGroupCountInput.on("change", () =>
+            resultGroupCountInput.addEventListener("change", () =>
             {
                 refreshGroupCounts();
             });
 
             refreshGroupCounts();
-            countInput.trigger("focus");
+            countInput.focus();
         }
-    }).render(true);
+    });
 }
 
 async function openCreatePartyGroupDialog(selectedTokens, referenceToken)
@@ -577,7 +681,7 @@ async function openCreatePartyGroupDialog(selectedTokens, referenceToken)
         </form>
     `;
 
-    return new Dialog({
+    return openDialogCompat({
         title: game.i18n.localize("MOBTOKENS.HudCreatePartyGroupFromSelection"),
         content,
         buttons: {
@@ -602,7 +706,7 @@ async function openCreatePartyGroupDialog(selectedTokens, referenceToken)
             }
         },
         default: "create"
-    }).render(true);
+    });
 }
 
 function getSelectedTokenGroupingData(token)
@@ -699,29 +803,21 @@ async function replaceSelectedTokensWithGroups(selectedTokens, groupActors, refe
         return;
     }
 
-    const createdTokenData = [];
-    const gridSize = Number(canvas?.grid?.size) || 100;
-    const baseX = Number(anchorDocument.x) || 0;
-    const baseY = Number(anchorDocument.y) || 0;
-
-    for (let index = 0; index < groupActors.length; index++)
-    {
-        const groupActor = groupActors[index];
-        const tokenDoc = await groupActor.getTokenDocument({
-            x: baseX + (gridSize * index),
-            y: baseY
-        });
-        createdTokenData.push(tokenDoc.toObject());
-    }
+    const createdTokenData = await createWallAwareTokenDataForActors(groupActors, {
+        anchorDocument,
+        includeAnchorSlot: true
+    });
 
     if (createdTokenData.length > 0)
     {
         await scene.createEmbeddedDocuments("Token", createdTokenData);
     }
 
-    const deleteIds = selectedTokens
-        .map((entry) => entry?.document?.id)
-        .filter(Boolean);
+    const deleteIds = Array.from(new Set(
+        selectedTokens
+            .map((entry) => entry?.document?.id)
+            .filter(Boolean)
+    )).filter((id) => scene?.tokens?.has(id));
 
     if (deleteIds.length > 0)
     {
@@ -751,7 +847,7 @@ export async function openSplitGroupDialog(groupActor, options = {})
         splitCountsHint
     });
 
-    return new Dialog({
+    return openDialogCompat({
         title: game.i18n.localize("MOBTOKENS.ContextSplitGroup"),
         content,
         buttons: {
@@ -804,54 +900,58 @@ export async function openSplitGroupDialog(groupActor, options = {})
         default: "split",
         render: (html) =>
         {
-            const inputCount = html.find("[name='splitGroupCount']");
-            const inputCounts = html.find("[name='splitCounts']");
-            const inputSplitIndividuals = html.find("[name='splitIndividuals']");
+            const root = getDialogContentRoot(html);
+            const inputCount = getNamedInput(root, "splitGroupCount");
+            const inputCounts = getNamedInput(root, "splitCounts");
+            const inputSplitIndividuals = getNamedInput(root, "splitIndividuals");
+            if (!(inputCount instanceof HTMLInputElement)
+                || !(inputCounts instanceof HTMLInputElement)
+                || !(inputSplitIndividuals instanceof HTMLInputElement)) return;
 
             const setIndividualsMode = (isIndividuals) =>
             {
                 if (isIndividuals)
                 {
-                    inputCount.val(totalCount);
-                    inputCounts.val(Array.from({ length: totalCount }, () => 1).join(", "));
-                    inputCount.prop("disabled", true);
-                    inputCounts.prop("disabled", true);
+                    inputCount.value = String(totalCount);
+                    inputCounts.value = Array.from({ length: totalCount }, () => 1).join(", ");
+                    inputCount.disabled = true;
+                    inputCounts.disabled = true;
                     return;
                 }
 
-                inputCount.prop("disabled", false);
-                inputCounts.prop("disabled", false);
-                const requestedGroups = Number(inputCount.val()) || defaultGroups;
+                inputCount.disabled = false;
+                inputCounts.disabled = false;
+                const requestedGroups = Number(inputCount.value) || defaultGroups;
                 const normalizedGroups = clampNumber(Math.round(requestedGroups), 2, totalCount);
-                inputCount.val(normalizedGroups);
-                inputCounts.val(suggestSplitCounts(totalCount, normalizedGroups));
+                inputCount.value = String(normalizedGroups);
+                inputCounts.value = suggestSplitCounts(totalCount, normalizedGroups);
             };
 
-            inputCount.on("change", () =>
+            inputCount.addEventListener("change", () =>
             {
-                if (inputSplitIndividuals.is(":checked")) return;
-                const requestedGroups = Number(inputCount.val()) || defaultGroups;
+                if (inputSplitIndividuals.checked) return;
+                const requestedGroups = Number(inputCount.value) || defaultGroups;
                 const normalizedGroups = clampNumber(Math.round(requestedGroups), 2, totalCount);
-                inputCount.val(normalizedGroups);
-                inputCounts.val(suggestSplitCounts(totalCount, normalizedGroups));
+                inputCount.value = String(normalizedGroups);
+                inputCounts.value = suggestSplitCounts(totalCount, normalizedGroups);
             });
 
-            inputSplitIndividuals.on("change", () =>
+            inputSplitIndividuals.addEventListener("change", () =>
             {
-                setIndividualsMode(inputSplitIndividuals.is(":checked"));
+                setIndividualsMode(inputSplitIndividuals.checked);
             });
 
             setIndividualsMode(false);
-            inputCount.trigger("focus");
+            inputCount.focus();
         }
-    }).render(true);
+    });
 }
 
 export async function showQuickStartPrompt()
 {
     const content = await renderActorGrouperTemplate("help-quick-start-prompt");
 
-    new Dialog({
+    openDialogCompat({
         title: game.i18n.localize("MOBTOKENS.HelpPromptTitle"),
         content,
         buttons: {
@@ -866,14 +966,14 @@ export async function showQuickStartPrompt()
             }
         },
         default: "show"
-    }).render(true);
+    });
 }
 
 export async function showQuickStartGuide()
 {
     const content = await renderActorGrouperTemplate("help-quick-start-guide");
 
-    new Dialog({
+    openDialogCompat({
         title: game.i18n.localize("MOBTOKENS.HelpGuideTitle"),
         content,
         buttons: {
@@ -883,7 +983,7 @@ export async function showQuickStartGuide()
             }
         },
         default: "close"
-    }).render(true);
+    });
 }
 
 export async function injectGroupPanel(actor, html)
@@ -1373,19 +1473,10 @@ async function placeCreatedSplitTokens(createdActors, referenceToken)
     const anchor = referenceToken?.document;
     if (!anchor) return;
 
-    const gridSize = Number(canvas?.grid?.size) || 100;
-    const baseX = Number(anchor.x) || 0;
-    const baseY = Number(anchor.y) || 0;
-
-    const tokenData = [];
-    for (let index = 0; index < createdActors.length; index++)
-    {
-        const actor = createdActors[index];
-        const x = baseX + gridSize * (index + 1);
-        const y = baseY;
-        const tokenDoc = await actor.getTokenDocument({ x, y });
-        tokenData.push(tokenDoc.toObject());
-    }
+    const tokenData = await createWallAwareTokenDataForActors(createdActors, {
+        anchorDocument: anchor,
+        includeAnchorSlot: false
+    });
 
     if (tokenData.length > 0)
     {

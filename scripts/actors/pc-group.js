@@ -1,4 +1,5 @@
 import { FLAG_SCOPE, GROUP_MODE_PARTY_PROXY } from "../core/constants.js";
+import { createWallAwareTokenDataForActors } from "../core/token-placement.js";
 import { getGroupFlags, isGroupActor } from "./group-model.js";
 
 export async function createPartyProxyGroupActor(selectedTokens, {
@@ -42,9 +43,11 @@ export async function createPartyProxyGroupActor(selectedTokens, {
     if (replaceSelectedTokens)
     {
         const scene = canvas?.scene;
-        const deleteIds = tokenEntries
-            .map((entry) => entry.tokenDocument.id)
-            .filter((id) => scene?.tokens?.has(id));
+        const deleteIds = Array.from(new Set(
+            tokenEntries
+                .map((entry) => entry.tokenDocument.id)
+                .filter(Boolean)
+        )).filter((id) => scene?.tokens?.has(id));
         if (scene && deleteIds.length > 0)
         {
             await scene.deleteEmbeddedDocuments("Token", deleteIds);
@@ -178,10 +181,7 @@ export async function splitPartyProxyGroupActor(groupActor, referenceToken)
         return;
     }
 
-    const gridSize = Number(canvas?.grid?.size) || 100;
-    const baseX = Number(anchorDocument.x) || 0;
-    const baseY = Number(anchorDocument.y) || 0;
-    const tokenData = [];
+    const memberActors = [];
     let missingCount = 0;
 
     for (let index = 0; index < members.length; index++)
@@ -194,26 +194,42 @@ export async function splitPartyProxyGroupActor(groupActor, referenceToken)
             continue;
         }
 
-        const tokenDoc = await memberActor.getTokenDocument({
-            x: baseX + (gridSize * index),
-            y: baseY
-        });
-        tokenData.push(tokenDoc.toObject());
+        memberActors.push(memberActor);
     }
 
-    if (tokenData.length < 1)
+    const [anchorMemberActor, ...remainingMemberActors] = memberActors;
+    if (!(anchorMemberActor instanceof Actor))
     {
         ui.notifications?.warn(game.i18n.localize("MOBTOKENS.Errors.PartyGroupMembersMissing"));
         return;
     }
 
-    await scene.createEmbeddedDocuments("Token", tokenData);
+    const anchorReplacementDoc = await anchorMemberActor.getTokenDocument({
+        x: Number(anchorDocument.x) || 0,
+        y: Number(anchorDocument.y) || 0
+    });
+    const anchorUpdate = anchorReplacementDoc.toObject();
+    delete anchorUpdate._id;
 
-    if (anchorDocument.id)
+    await anchorDocument.update(anchorUpdate);
+
+    const tokenData = await createWallAwareTokenDataForActors(remainingMemberActors, {
+        anchorDocument,
+        includeAnchorSlot: false
+    });
+
+    if ((tokenData.length + 1) < 1)
     {
-        await scene.deleteEmbeddedDocuments("Token", [anchorDocument.id]);
+        ui.notifications?.warn(game.i18n.localize("MOBTOKENS.Errors.PartyGroupMembersMissing"));
+        return;
     }
-    await groupActor.delete();
+
+    if (tokenData.length > 0)
+    {
+        await scene.createEmbeddedDocuments("Token", tokenData);
+    }
+
+    await groupActor.delete({ deleteAllTokens: false });
 
     if (missingCount > 0)
     {
@@ -223,7 +239,7 @@ export async function splitPartyProxyGroupActor(groupActor, referenceToken)
     }
 
     ui.notifications?.info(game.i18n.format("MOBTOKENS.Notifications.PartyGroupSplit", {
-        count: tokenData.length
+        count: tokenData.length + 1
     }));
 }
 

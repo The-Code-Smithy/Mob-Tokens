@@ -11,6 +11,8 @@
     "MOBTOKENS.DialogPartyGroupDefaultName": "Party Group ({count})",
     "MOBTOKENS.DialogPartyActorSearch": "Find Actors",
     "MOBTOKENS.DialogPartyActorSearchPlaceholder": "Search by actor name or type",
+    "MOBTOKENS.DialogPartyFilterOnlyPlayerCharacters": "Show only Player Characters",
+    "MOBTOKENS.DialogPartyFilterOnlyNonPlayerCharacters": "Show only Non-player Characters",
     "MOBTOKENS.DialogPlacePartyTokenOnScene": "Place party proxy token on active scene",
     "MOBTOKENS.DialogTargetFolder": "Actor Folder",
     "MOBTOKENS.DialogFolderRoot": "Root (No Folder)",

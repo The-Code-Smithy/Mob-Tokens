@@ -118,6 +118,11 @@
     width: auto;
 }
 
+.mob-tokens-party-filter-options {
+    display: grid;
+    gap: 0.25rem;
+}
+
 .mob-tokens-party-actor-list {
     max-height: 280px;
     overflow: auto;
