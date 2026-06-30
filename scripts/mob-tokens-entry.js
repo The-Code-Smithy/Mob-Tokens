@@ -1,5 +1,5 @@
 import { FLAG_SCOPE, MODULE_ID, UPDATE_GUARD } from "./core/constants.js";
-import { getActorFromDirectoryLi, isGroupActor, isMobGroupActor } from "./actors/group-model.js";
+import { getActorFolderFromDirectoryLi, getActorFromDirectoryLi, isGroupActor, isMobGroupActor } from "./actors/group-model.js";
 import
 {
     injectTokenHudGroupAction,
@@ -84,6 +84,22 @@ async function ensureMoraleSettingInitialized()
 Hooks.on("getActorContextOptions", (_app, entryOptions) =>
 {
     addActorContextEntries(entryOptions);
+});
+
+Hooks.on("getActorDirectoryFolderContext", (_app, entryOptions) =>
+{
+    addActorFolderContextEntries(entryOptions);
+});
+
+Hooks.on("getDocumentDirectoryFolderContext", (_app, entryOptions) =>
+{
+    addActorFolderContextEntries(entryOptions);
+});
+
+Hooks.on("getFolderContextOptions", (app, entryOptions) =>
+{
+    if (!isActorDirectoryApp(app)) return;
+    addActorFolderContextEntries(entryOptions);
 });
 
 Hooks.on("updateActor", async (actor, _changed, options) =>
@@ -213,4 +229,59 @@ function addActorContextEntries(entryOptions)
             }
         });
     }
+}
+
+function addActorFolderContextEntries(entryOptions)
+{
+    if (!Array.isArray(entryOptions)) return;
+
+    const createPartyFromFolderLabel = game.i18n.localize("MOBTOKENS.ContextCreatePartyGroupFromFolder");
+    if (entryOptions.some((entry) => entry.label === createPartyFromFolderLabel || entry.name === createPartyFromFolderLabel)) return;
+
+    entryOptions.push({
+        label: createPartyFromFolderLabel,
+        icon: "<i class=\"fas fa-folder-plus\"></i>",
+        visible: (li) =>
+        {
+            if (!game.user?.isGM) return false;
+            const folder = getActorFolderFromDirectoryLi(li);
+            if (!folder) return false;
+            const actorsInFolder = (game.actors?.contents ?? []).filter((actor) =>
+                actor instanceof Actor
+                && !isGroupActor(actor)
+                && String(actor.folder?.id ?? "") === String(folder.id)
+            );
+            return actorsInFolder.length >= 2;
+        },
+        onClick: async (_event, li) =>
+        {
+            const folder = getActorFolderFromDirectoryLi(li);
+            if (!folder)
+            {
+                ui.notifications?.error(game.i18n.localize("MOBTOKENS.Errors.ActorNotFound"));
+                return;
+            }
+
+            const actorsInFolder = (game.actors?.contents ?? []).filter((actor) =>
+                actor instanceof Actor
+                && !isGroupActor(actor)
+                && String(actor.folder?.id ?? "") === String(folder.id)
+            );
+
+            if (actorsInFolder.length < 2)
+            {
+                ui.notifications?.warn(game.i18n.localize("MOBTOKENS.Errors.InvalidPartyActorSelectionCount"));
+                return;
+            }
+
+            await openCreatePartyGroupFromActorsDialog(null, actorsInFolder.map((actor) => actor.id));
+        }
+    });
+}
+
+function isActorDirectoryApp(app)
+{
+    const documentName = String(app?.documentName ?? app?.options?.documentName ?? "").toLowerCase();
+    if (documentName === "actor") return true;
+    return app?.collection === game.actors;
 }

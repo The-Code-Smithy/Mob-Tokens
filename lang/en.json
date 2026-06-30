@@ -1,6 +1,7 @@
 {
     "MOBTOKENS.ContextCreateGroup": "Create Group",
     "MOBTOKENS.ContextCreatePartyGroup": "Create Party Group",
+    "MOBTOKENS.ContextCreatePartyGroupFromFolder": "Create Party Group From Folder",
     "MOBTOKENS.ContextSplitGroup": "Split Group",
     "MOBTOKENS.HudCreateGroupFromSelection": "Create Group From Selected Tokens",
     "MOBTOKENS.HudCreatePartyGroupFromSelection": "Create Party Proxy From Selected Tokens",
@@ -66,6 +67,7 @@
     "MOBTOKENS.HelpGuideOutro": "Only GMs can create group actors, and already-grouped actors do not show the Create Group action.",
     "MOBTOKENS.Notifications.GroupCreated": "Created group actor: {name}",
     "MOBTOKENS.Notifications.PartyGroupCreated": "Created party proxy {name} with {count} members.",
+    "MOBTOKENS.Notifications.ClickToPlacePartyProxy": "Click on the canvas to place the party proxy token (right-click to cancel).",
     "MOBTOKENS.Notifications.GroupCreatedFromTokens": "Created {name} from {count} selected tokens.",
     "MOBTOKENS.Notifications.GroupsCreatedFromTokens": "Created {groups} group actors from {count} selected tokens.",
     "MOBTOKENS.Notifications.GroupSplit": "Split {name} into {count} groups.",

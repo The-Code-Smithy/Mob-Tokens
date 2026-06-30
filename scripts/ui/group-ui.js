@@ -179,8 +179,14 @@ export async function openCreateGroupDialog(actor)
     });
 }
 
-export async function openCreatePartyGroupFromActorsDialog(seedActor = null)
+export async function openCreatePartyGroupFromActorsDialog(seedActor = null, preselectedActorIds = null)
 {
+    const preselectedSet = new Set(
+        Array.isArray(preselectedActorIds)
+            ? preselectedActorIds.map((id) => String(id ?? "")).filter(Boolean)
+            : []
+    );
+
     const allActors = Array.from(game.actors?.contents ?? [])
         .filter((actor) => actor instanceof Actor)
         .filter((actor) => !isGroupActor(actor))
@@ -199,7 +205,8 @@ export async function openCreatePartyGroupFromActorsDialog(seedActor = null)
         const escapedType = foundry.utils.escapeHTML(String(actor.type ?? ""));
         const isPlayerCharacter = isLikelyPlayerCharacter(actor);
         const isNonPlayerCharacter = !isPlayerCharacter;
-        const checked = seedActor?.id === actor.id ? " checked" : "";
+        const shouldCheck = preselectedSet.has(String(actor.id ?? "")) || seedActor?.id === actor.id;
+        const checked = shouldCheck ? " checked" : "";
         return `
             <label class="mob-tokens-party-actor-option" data-ag="party-actor-option" data-actor-name="${foundry.utils.escapeHTML(actorName.toLowerCase())}" data-actor-type="${escapedType.toLowerCase()}" data-actor-is-pc="${isPlayerCharacter ? "1" : "0"}" data-actor-is-npc="${isNonPlayerCharacter ? "1" : "0"}">
                 <input type="checkbox" name="memberActorIds" value="${actor.id}"${checked}>
@@ -209,8 +216,13 @@ export async function openCreatePartyGroupFromActorsDialog(seedActor = null)
         `;
     }).join("");
 
+    const defaultSelectedCount = allActors.reduce((count, actor) =>
+    {
+        const isSelected = preselectedSet.has(String(actor.id ?? "")) || seedActor?.id === actor.id;
+        return isSelected ? count + 1 : count;
+    }, 0);
     const defaultGroupName = game.i18n.format("MOBTOKENS.DialogPartyGroupDefaultName", {
-        count: Math.max(seedActor ? 1 : 0, 2)
+        count: Math.max(defaultSelectedCount, 2)
     });
 
     const content = `

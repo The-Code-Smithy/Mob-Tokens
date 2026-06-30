@@ -39,6 +39,30 @@ export function getActorFromDirectoryLi(li)
     return null;
 }
 
+export function getActorFolderFromDirectoryLi(li)
+{
+    const rawElement = li?.[0] ?? li?.currentTarget ?? li;
+    const element = rawElement?.closest?.("[data-folder-id]") ?? rawElement;
+    const data = typeof li?.data === "function" ? li.data() ?? {} : {};
+
+    const folderId = data.folderId
+        ?? data.documentId
+        ?? data.entryId
+        ?? element?.dataset?.folderId
+        ?? element?.dataset?.documentId
+        ?? element?.dataset?.entryId
+        ?? element?.getAttribute?.("data-folder-id")
+        ?? element?.getAttribute?.("data-document-id")
+        ?? element?.getAttribute?.("data-entry-id");
+
+    if (!folderId) return null;
+
+    const folder = game.folders?.get(folderId) ?? null;
+    if (!folder) return null;
+    if (folder.type && folder.type !== "Actor") return null;
+    return folder;
+}
+
 export function getGroupFlags(actor)
 {
     return actor.flags?.[FLAG_SCOPE] ?? {};

@@ -126,18 +126,21 @@ export async function createPartyProxyGroupFromActors(memberActors, {
         else
         {
             const anchorDocument = referenceToken?.document ?? null;
-            const gridSize = Number(canvas?.grid?.size) || 100;
-            const defaultX = gridSize * 2;
-            const defaultY = gridSize * 2;
-            const anchorX = Number(anchorDocument?.x);
-            const anchorY = Number(anchorDocument?.y);
-
-            const proxyTokenDoc = await createdActor.getTokenDocument({
-                x: Number.isFinite(anchorX) ? anchorX : defaultX,
-                y: Number.isFinite(anchorY) ? anchorY : defaultY
-            });
-            const [token] = await scene.createEmbeddedDocuments("Token", [proxyTokenDoc.toObject()]);
-            createdToken = token ?? null;
+            if (anchorDocument)
+            {
+                const anchorX = Number(anchorDocument?.x);
+                const anchorY = Number(anchorDocument?.y);
+                const proxyTokenDoc = await createdActor.getTokenDocument({
+                    x: Number.isFinite(anchorX) ? anchorX : 0,
+                    y: Number.isFinite(anchorY) ? anchorY : 0
+                });
+                const [token] = await scene.createEmbeddedDocuments("Token", [proxyTokenDoc.toObject()]);
+                createdToken = token ?? null;
+            }
+            else
+            {
+                createdToken = await placePartyProxyTokenByClick(createdActor, scene);
+            }
         }
     }
 
@@ -152,6 +155,211 @@ export async function createPartyProxyGroupFromActors(memberActors, {
     return {
         actor: createdActor,
         token: createdToken
+    };
+}
+
+async function placePartyProxyTokenByClick(actor, scene)
+{
+    const stage = canvas?.app?.stage;
+    if (!stage)
+    {
+        ui.notifications?.warn(game.i18n.localize("MOBTOKENS.Errors.NoActiveScene"));
+        return null;
+    }
+
+    ui.notifications?.info(game.i18n.localize("MOBTOKENS.Notifications.ClickToPlacePartyProxy"));
+
+    const preview = await createPartyProxyPlacementPreview(actor);
+
+    return new Promise((resolve) =>
+    {
+        let completed = false;
+
+        const cleanup = () =>
+        {
+            if (completed) return;
+            completed = true;
+            stage.off?.("pointerdown", onPointerDown);
+            stage.off?.("pointermove", onPointerMove);
+            stage.off?.("rightdown", onRightDown);
+            preview?.destroy?.();
+        };
+
+        const resolvePointerPosition = (event) =>
+        {
+            const local = event?.data?.getLocalPosition?.(canvas.stage)
+                ?? canvas?.mousePosition
+                ?? { x: 0, y: 0 };
+            return {
+                x: Number(local.x) || 0,
+                y: Number(local.y) || 0
+            };
+        };
+
+        const onPointerMove = (event) =>
+        {
+            if (!preview) return;
+            const localPosition = resolvePointerPosition(event);
+            const snappedPosition = getSnappedCanvasPosition(localPosition.x, localPosition.y);
+            preview.update?.(snappedPosition.x, snappedPosition.y);
+        };
+
+        const onRightDown = (event) =>
+        {
+            event?.stopPropagation?.();
+            cleanup();
+            resolve(null);
+        };
+
+        const onPointerDown = async (event) =>
+        {
+            const button = Number(event?.button ?? event?.data?.originalEvent?.button ?? 0);
+            if (button === 2)
+            {
+                onRightDown(event);
+                return;
+            }
+            if (button !== 0) return;
+
+            event?.stopPropagation?.();
+
+            const localPosition = resolvePointerPosition(event);
+            const snappedPosition = getSnappedCanvasPosition(localPosition.x, localPosition.y);
+
+            try
+            {
+                const proxyTokenDoc = await actor.getTokenDocument({
+                    x: snappedPosition.x,
+                    y: snappedPosition.y
+                });
+                const [token] = await scene.createEmbeddedDocuments("Token", [proxyTokenDoc.toObject()]);
+                cleanup();
+                resolve(token ?? null);
+            }
+            catch (_error)
+            {
+                cleanup();
+                resolve(null);
+            }
+        };
+
+        stage.on?.("pointermove", onPointerMove);
+        stage.on?.("pointerdown", onPointerDown);
+        stage.on?.("rightdown", onRightDown);
+        onPointerMove(null);
+    });
+}
+
+async function createPartyProxyPlacementPreview(actor)
+{
+    const PIXIRef = globalThis.PIXI;
+    const stage = canvas?.app?.stage;
+    if (!PIXIRef || !stage) return null;
+
+    const gridSize = Number(canvas?.grid?.size) || 100;
+    const tokenWidth = Math.max(Number(actor?.prototypeToken?.width) || 1, 1) * gridSize;
+    const tokenHeight = Math.max(Number(actor?.prototypeToken?.height) || 1, 1) * gridSize;
+    const texturePath = actor?.prototypeToken?.texture?.src || actor?.img;
+
+    const container = new PIXIRef.Container();
+    container.eventMode = "none";
+    container.zIndex = 100000;
+
+    const sprite = new PIXIRef.Sprite();
+    sprite.width = tokenWidth;
+    sprite.height = tokenHeight;
+    sprite.alpha = 0.55;
+    sprite.tint = 0xffffff;
+
+    if (texturePath)
+    {
+        try
+        {
+            const textureLoader = foundry?.canvas?.loadTexture ?? globalThis.loadTexture;
+            const texture = typeof textureLoader === "function"
+                ? await textureLoader(texturePath)
+                : null;
+            if (texture) sprite.texture = texture;
+        }
+        catch (_error)
+        {
+            sprite.texture = PIXIRef.Texture.WHITE;
+        }
+    }
+    else
+    {
+        sprite.texture = PIXIRef.Texture.WHITE;
+    }
+
+    const border = new PIXIRef.Graphics();
+    border.lineStyle(2, 0xf4b942, 0.95);
+    border.beginFill(0x000000, 0.12);
+    border.drawRect(0, 0, tokenWidth, tokenHeight);
+    border.endFill();
+
+    container.addChild(sprite);
+    container.addChild(border);
+    stage.addChild(container);
+
+    return {
+        update: (x, y) =>
+        {
+            container.position.set(Number(x) || 0, Number(y) || 0);
+        },
+        destroy: () =>
+        {
+            try
+            {
+                container.parent?.removeChild?.(container);
+                container.destroy({ children: true });
+            }
+            catch (_error)
+            {
+                // no-op
+            }
+        }
+    };
+}
+
+function getSnappedCanvasPosition(x, y)
+{
+    const snapMode = CONST?.GRID_SNAPPING_MODES?.CENTER ?? 1;
+
+    try
+    {
+        const snappedLegacy = canvas?.grid?.getSnappedPosition?.(x, y, { mode: snapMode });
+        if (Number.isFinite(Number(snappedLegacy?.x)) && Number.isFinite(Number(snappedLegacy?.y)))
+        {
+            return {
+                x: Number(snappedLegacy.x),
+                y: Number(snappedLegacy.y)
+            };
+        }
+    }
+    catch (_error)
+    {
+        // Fall through to other snapping APIs.
+    }
+
+    try
+    {
+        const snappedPoint = canvas?.grid?.getSnappedPoint?.({ x, y }, { mode: snapMode });
+        if (Number.isFinite(Number(snappedPoint?.x)) && Number.isFinite(Number(snappedPoint?.y)))
+        {
+            return {
+                x: Number(snappedPoint.x),
+                y: Number(snappedPoint.y)
+            };
+        }
+    }
+    catch (_error)
+    {
+        // Fall through to raw coordinates.
+    }
+
+    return {
+        x: Number(x) || 0,
+        y: Number(y) || 0
     };
 }
 
