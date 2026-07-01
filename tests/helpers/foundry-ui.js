@@ -243,8 +243,13 @@ async function openActorsSidebar(page)
     {
         const isVisible = await evaluateOrFallback(page, () =>
         {
-            const actors = document.querySelector("#actors");
-            return Boolean(actors && actors.offsetParent !== null);
+            const actorPane = document.querySelector("#actors")
+                || document.querySelector("[data-tab='actors']")
+                || document.querySelector(".tab.actors");
+            if (!actorPane) return false;
+
+            const hasDirectoryList = Boolean(actorPane.querySelector(".directory-list, .directory-items, ol.directory-list"));
+            return hasDirectoryList && actorPane.offsetParent !== null;
         }, null, false);
         if (isVisible) return;
 
@@ -273,8 +278,13 @@ async function openActorsSidebar(page)
 
     await page.waitForFunction(() =>
     {
-        const actors = document.querySelector("#actors");
-        return Boolean(actors && actors.offsetParent !== null);
+        const actorPane = document.querySelector("#actors")
+            || document.querySelector("[data-tab='actors']")
+            || document.querySelector(".tab.actors");
+        if (!actorPane) return false;
+
+        const hasDirectoryList = Boolean(actorPane.querySelector(".directory-list, .directory-items, ol.directory-list"));
+        return hasDirectoryList && actorPane.offsetParent !== null;
     }, null, { timeout: 30000 });
 }
 

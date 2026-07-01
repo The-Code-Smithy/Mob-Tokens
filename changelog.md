@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+## 0.7.2
+
+- Refactored group UI logic into focused modules for dialogs, HUD actions, panel behavior, and actor create/split operations.
+- Split UI Playwright coverage into focused spec files with shared test helpers for maintainability.
+- Stabilized and restored the fourth gate test for create/split workflow while preserving coverage intent.
+
 ## 0.7.1
 
 - Fixed Playwright gate test scripts to target literal `[gate]` tags.
