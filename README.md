@@ -195,3 +195,6 @@ Key variables:
 - Split into individual actors.
 - Verify regroup HUD button appears for selected mob token actors.
 - Create Party Proxy groups from Actor Directory with searchable actor picker.
+- Verify Actor Folder context action visibility rules for Party Group creation.
+- Add party members via party-panel drag and drop without opening unintended actor sheets.
+- Remove party members via party-panel controls while preserving dedicated party layout.

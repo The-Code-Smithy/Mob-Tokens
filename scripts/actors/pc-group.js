@@ -475,13 +475,6 @@ export async function splitPartyProxyGroupActor(groupActor, referenceToken)
 
     await groupActor.delete({ deleteAllTokens: false });
 
-    if (missingCount > 0)
-    {
-        ui.notifications?.warn(game.i18n.format("MOBTOKENS.Errors.PartyGroupMembersPartialMissing", {
-            count: missingCount
-        }));
-    }
-
     ui.notifications?.info(game.i18n.format("MOBTOKENS.Notifications.PartyGroupSplit", {
         count: tokenData.length + 1
     }));

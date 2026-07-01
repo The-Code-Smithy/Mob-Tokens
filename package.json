@@ -6,7 +6,9 @@
     "scripts": {
         "test:ui": "set PLAYWRIGHT_HEADLESS=true&& playwright test",
         "test:ui:headed": "set PLAYWRIGHT_HEADLESS=false&& playwright test --headed",
-        "test:ui:debug": "playwright test --debug"
+        "test:ui:debug": "playwright test --debug",
+        "test:ui:gate": "set PLAYWRIGHT_HEADLESS=true&& playwright test --grep \"\\[gate\\]\"",
+        "test:ui:gate:headed": "set PLAYWRIGHT_HEADLESS=false&& playwright test --headed --grep \"\\[gate\\]\""
     },
     "devDependencies": {
         "@playwright/test": "^1.54.2"

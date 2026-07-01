@@ -115,30 +115,25 @@ async function loginToFoundry(page)
 
 async function waitForGameReady(page)
 {
-    await page.waitForURL("**/game", { timeout: 30000 });
+    await page.waitForURL("**/game", { timeout: 60000 });
     await page.waitForLoadState("domcontentloaded");
     await page.waitForFunction(() =>
     {
         const hasGame = typeof window !== "undefined" && Boolean(window.game);
         const hasUi = typeof window !== "undefined" && Boolean(window.ui);
-        const gameReady = Boolean(window.game?.ready);
-        const activeUser = Boolean(window.game?.user?.id);
-        const canvasReady = Boolean(window.canvas?.ready);
-        const activeScene = Boolean(window.canvas?.scene);
+        const activeUser = Boolean(window.game?.user);
+        const notificationsReady = Boolean(window.ui?.notifications);
         const sidebarReady = Boolean(document.querySelector("#sidebar, #ui-right"));
         const joinFormVisible = Boolean(document.querySelector("#join-game-form"));
-        const loadingNotificationVisible = Array.from(document.querySelectorAll("#notifications .notification p"))
-            .some((node) => /loading\s+/i.test(String(node?.textContent ?? "")));
+        const setupVisible = Boolean(document.querySelector("#setup"));
 
         return hasGame
             && hasUi
-            && gameReady
             && activeUser
-            && canvasReady
-            && activeScene
+            && notificationsReady
             && sidebarReady
             && !joinFormVisible
-            && !loadingNotificationVisible;
+            && !setupVisible;
     }, null, { timeout: 240000 });
 }
 

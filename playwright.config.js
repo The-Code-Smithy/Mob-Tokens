@@ -16,6 +16,13 @@ module.exports = defineConfig({
     use: {
         baseURL,
         headless,
+        viewport: {
+            width: 1600,
+            height: 1000
+        },
+        launchOptions: {
+            args: ["--window-size=1600,1000"]
+        },
         trace: "on-first-retry",
         screenshot: "only-on-failure",
         video: "retain-on-failure"
