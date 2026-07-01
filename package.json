@@ -1,7 +1,7 @@
 {
     "name": "mob-tokens-tests",
     "private": true,
-    "version": "0.7.0",
+    "version": "0.7.1",
     "description": "Playwright UI regression tests for the Mob Tokens Foundry module",
     "scripts": {
         "test:ui": "set PLAYWRIGHT_HEADLESS=true&& playwright test",

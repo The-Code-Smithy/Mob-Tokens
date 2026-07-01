@@ -1,6 +1,6 @@
 # Mob Tokens
 
-Version: 0.7.0
+Version: 0.7.1
 
 Mob Tokens is a Foundry VTT v14 module that lets a GM represent multiple identical creatures as a single token on the canvas. It is aimed at large encounter management where token count, combat overhead, and scene clutter would otherwise slow play down.
 

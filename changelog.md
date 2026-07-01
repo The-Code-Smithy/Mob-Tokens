@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+## 0.7.1
+
+- Fixed Playwright gate test scripts to target literal `[gate]` tags.
+- Relaxed Foundry test login readiness checks to avoid false startup timeouts in slower environments.
+- Stabilized minimal gate coverage for core create/split and party member add/remove flows.
+
 ## 0.7.0
 
 - Added Actor Directory folder context action to create Party Groups from folder members with automatic preselection.
